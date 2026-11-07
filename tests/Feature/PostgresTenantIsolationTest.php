@@ -407,6 +407,18 @@ final class PostgresTenantIsolationTest extends TestCase
         }
     }
 
+    public function test_user_principals_use_string_uuidv7_identifiers(): void
+    {
+        $user = new User;
+
+        $this->assertSame('string', $user->getKeyType());
+        $this->assertFalse($user->getIncrementing());
+        $this->assertMatchesRegularExpression(
+            '/\A[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}\z/i',
+            $user->newUniqueId(),
+        );
+    }
+
     private function assertContextCleared(): void
     {
         $context = DB::selectOne("SELECT current_setting('app.account_id', true) AS account_id,
