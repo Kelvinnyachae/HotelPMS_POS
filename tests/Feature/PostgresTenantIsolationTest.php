@@ -5,6 +5,7 @@ namespace Tests\Feature;
 use App\Http\Middleware\ApplyTenantContext;
 use App\Models\User;
 use App\Tenancy\TenantContext;
+use App\Tenancy\TenantMembershipResolver;
 use Illuminate\Database\QueryException;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -375,6 +376,19 @@ final class PostgresTenantIsolationTest extends TestCase
         $this->assertSame($principalId, $membership['context']->principal_id);
         $this->assertSame(1, $membership['own_count']);
         $this->assertSame(0, $membership['other_count']);
+        $this->assertContextCleared();
+    }
+
+    public function test_membership_resolver_accepts_the_seeded_active_membership(): void
+    {
+        $result = app(TenantMembershipResolver::class)->withinMembership(
+            'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+            'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+            '11111111-1111-4111-8111-111111111111',
+            fn (): string => 'authorized',
+        );
+
+        $this->assertSame('authorized', $result);
         $this->assertContextCleared();
     }
 
