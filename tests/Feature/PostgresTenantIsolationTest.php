@@ -306,6 +306,9 @@ final class PostgresTenantIsolationTest extends TestCase
         $middleware = app(ApplyTenantContext::class);
         $request = Request::create('/', 'GET', ['account_id' => $accountId, 'property_id' => $propertyId]);
         $request->setUserResolver(fn (): User => $this->user($accountId));
+        $this->assertSame($accountId, $request->input('account_id'));
+        $this->assertSame($propertyId, $request->input('property_id'));
+        $this->assertSame($accountId, $request->user()->getAuthIdentifier());
 
         $response = $middleware->handle($request, function (Request $request) use ($accountId, $propertyId): Response {
             $this->assertSame(1, DB::connection()->transactionLevel());
