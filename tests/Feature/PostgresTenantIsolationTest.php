@@ -35,7 +35,13 @@ final class PostgresTenantIsolationTest extends TestCase
                    roles.rolcreatedb::text AS can_create_database,
                    roles.rolcreaterole::text AS can_create_roles,
                    roles.rolbypassrls::text AS can_bypass_rls,
+                   EXISTS (SELECT 1 FROM pg_auth_members WHERE member = roles.oid)::text AS has_role_memberships,
+                   has_database_privilege(current_user, current_database(), 'CONNECT')::text AS can_connect_database,
                    has_schema_privilege(current_user, 'public', 'CREATE')::text AS can_create_public_schema,
+                   has_schema_privilege(current_user, 'tenant', 'USAGE')::text AS can_use_tenant_schema,
+                   has_schema_privilege(current_user, 'tenant', 'CREATE')::text AS can_create_tenant_schema,
+                   has_schema_privilege(current_user, 'g2_proof', 'USAGE')::text AS can_use_proof_schema,
+                   has_schema_privilege(current_user, 'g2_proof', 'CREATE')::text AS can_create_proof_schema,
                    databases.datdba::regrole::text AS database_owner,
                    (roles.rolname = databases.datdba::regrole::text)::text AS is_database_owner
             FROM pg_roles AS roles
@@ -48,7 +54,13 @@ final class PostgresTenantIsolationTest extends TestCase
         $this->assertSame('false', $role->can_create_database);
         $this->assertSame('false', $role->can_create_roles);
         $this->assertSame('false', $role->can_bypass_rls);
+        $this->assertSame('false', $role->has_role_memberships);
+        $this->assertSame('true', $role->can_connect_database);
         $this->assertSame('false', $role->can_create_public_schema);
+        $this->assertSame('false', $role->can_use_tenant_schema);
+        $this->assertSame('false', $role->can_create_tenant_schema);
+        $this->assertSame('true', $role->can_use_proof_schema);
+        $this->assertSame('false', $role->can_create_proof_schema);
         $this->assertSame('false', $role->is_database_owner);
         $this->assertSame('dawineks_owner', $role->database_owner);
     }
