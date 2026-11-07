@@ -1,0 +1,68 @@
+name: G2 tenant security proof
+
+on:
+  pull_request:
+  push:
+
+jobs:
+  postgres-rls:
+    name: PostgreSQL ${{ matrix.postgres-version }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        postgres-version: ['15', '16', '17', '18']
+    services:
+      postgres:
+        image: postgres:${{ matrix.postgres-version }}
+        env:
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d postgres"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      PGHOST: 127.0.0.1
+      PGPORT: 5432
+      PGUSER: postgres
+      PGPASSWORD: postgres
+      DB_HOST: 127.0.0.1
+      DB_PORT: 5432
+      DB_DATABASE: dawineks_hospitality_os
+      DB_USERNAME: dawineks_runtime
+      DB_PASSWORD: g2-ci-runtime-only
+      G2_DB_DATABASE: dawineks_hospitality_os
+      TENANT_CONTEXT_KEY: 0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.5'
+          extensions: mbstring, pdo_pgsql, pgsql
+          coverage: none
+
+      - name: Install PHP dependencies
+        run: composer install --no-interaction --prefer-dist --no-progress
+
+      - name: Create least-privilege roles and database
+        run: psql -v ON_ERROR_STOP=1 -d postgres -f database/security/g2-ci-bootstrap.sql
+
+      - name: Install isolated RLS proof fixture
+        run: psql -v ON_ERROR_STOP=1 -d dawineks_hospitality_os -f database/security/g2-proof-fixtures.sql
+
+      - name: Seed the CI-only tenant context signing key
+        run: >-
+          psql -v ON_ERROR_STOP=1 -d dawineks_hospitality_os
+          -c "INSERT INTO g2_proof.context_keys (key_id, key_material)
+          VALUES ('active', decode('${TENANT_CONTEXT_KEY}', 'hex'))"
+
+      - name: Enforce tenant table policy coverage
+        run: psql -v ON_ERROR_STOP=1 -d dawineks_hospitality_os -f database/security/assert-tenant-rls.sql
+
+      - name: Test tenant isolation under the runtime login
+        run: php artisan test --compact tests/Feature/PostgresTenantIsolationTest.php
