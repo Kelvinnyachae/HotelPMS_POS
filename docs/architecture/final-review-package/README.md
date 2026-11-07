@@ -39,7 +39,7 @@ The final outcomes above were supplied for the review record. The original final
 
 ## Gate status
 
-G1 is **Passed** as a governance decision. G2 remains **Open / not passed** with partial local verification recorded in [G2 tenant runtime evidence](g2-tenant-runtime-evidence.md); there is no G2 acceptance record. G3–G7 remain **Open / not passed** without implementation evidence or verifier acceptance. “Resolved” in the finding traceability means the architecture response is specified; it does not mean deployment evidence exists.
+G1 is **Passed** as a governance decision. G2 remains **Open / not passed** with local verification and successful hosted workflow [G2 tenant security proof #1](https://github.com/Kelvinnyachae/HotelPMS_POS/actions/runs/42413331998) recorded in [G2 tenant runtime evidence](g2-tenant-runtime-evidence.md); integration-wide adversarial coverage, real connection reset/eviction proof, production grant review, and independent security review remain outstanding. There is no G2 acceptance record. G3–G7 remain **Open / not passed** without implementation evidence or verifier acceptance. “Resolved” in the finding traceability means the architecture response is specified; it does not mean deployment evidence exists.
 
 ## Git record
 

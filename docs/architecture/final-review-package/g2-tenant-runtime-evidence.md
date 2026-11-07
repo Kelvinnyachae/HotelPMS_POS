@@ -17,14 +17,15 @@
 - The rollback-failure path now calls Laravel's connection-manager purge for the affected connection. Its focused test passed: 1 test, 8 assertions. This verifies the purge is requested when rollback fails; a real PostgreSQL reset failure and connection eviction are not simulated by this unit test.
 - The tenant-table coverage guard executed successfully against the live PostgreSQL 18.6 database (318 ms). The `tenant` schema currently has no tables, so this verifies guard execution only, not business-table policy coverage.
 - Combined verification passed: 8 tests, 37 assertions. The current installed PHP runtime lacks `pdo_pgsql` and `mbstring`; the suite was run with matching PHP 8.5.12 NTS x64 modules loaded temporarily for the test process. No PHP installation or system configuration was changed.
+- Hosted verification passed: GitHub Actions run [G2 tenant security proof #1](https://github.com/Kelvinnyachae/HotelPMS_POS/actions/runs/42413331998) completed successfully for commit [`5c2afd4`](https://github.com/Kelvinnyachae/HotelPMS_POS/commit/5c2afd45faf45cc5dcb6c25479bc10113980ed3b) on branch `codex/g2-verification-2026-11-07`. This records successful execution of the configured workflow; it does not supply the missing application-wide integration, real reset/eviction, grant-review, or independent-review evidence below.
 
 ## Not yet evidenced
 
-- The GitHub Actions workflow has not run. No CI output or independent security review is recorded. The available checkout has no `gh`, Docker, or `act` runner installed, and the changes have not been submitted to GitHub to trigger the hosted workflow.
+- No independent security review is recorded. Hosted CI is now evidenced by run [G2 tenant security proof #1](https://github.com/Kelvinnyachae/HotelPMS_POS/actions/runs/42413331998), but its success does not replace the other G2 acceptance evidence.
 - This proof does not exercise the application’s actual identity/membership resolver or the Filament, Livewire, API, export/file, queue/schedule, Octane, pooled-connection checkout/release, and error/retry paths required by G2. The backend-PID check proves reuse of one PostgreSQL session across test operations, not behavior of an external connection pool or long-lived worker.
 - A real PostgreSQL rollback/reset failure and resulting pool/connection eviction have not been demonstrated. The rollback-failure unit test verifies the Laravel connection manager is asked to purge the connection.
 - No separate migration login or full production grant review has been qualified.
 
 ## Disposition
 
-G2 remains **Open / not passed**. Tenant business tables and tenant-scoped modules remain blocked pending the missing database, integration, CI, and independent-review evidence listed in `implementation-gates.md`.
+G2 remains **Open / not passed**. Tenant business tables and tenant-scoped modules remain blocked pending the missing integration, production-grant, and independent-review evidence listed in `implementation-gates.md`.
