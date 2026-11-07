@@ -354,6 +354,30 @@ final class PostgresTenantIsolationTest extends TestCase
         $this->assertContextCleared();
     }
 
+    public function test_signed_principal_context_resolves_only_its_active_membership(): void
+    {
+        $principalId = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
+
+        $membership = app(TenantContext::class)->withinPrincipal($principalId, function () use ($principalId): array {
+            $context = DB::selectOne('SELECT g2_proof.valid_principal_context() AS is_valid,
+                                             g2_proof.current_principal_id()::text AS principal_id');
+
+            return [
+                'context' => $context,
+                'own_count' => DB::table('g2_proof.account_memberships')->where('user_id', $principalId)->count(),
+                'other_count' => DB::table('g2_proof.account_memberships')
+                    ->where('user_id', 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb')
+                    ->count(),
+            ];
+        });
+
+        $this->assertTrue($membership['context']->is_valid);
+        $this->assertSame($principalId, $membership['context']->principal_id);
+        $this->assertSame(1, $membership['own_count']);
+        $this->assertSame(0, $membership['other_count']);
+        $this->assertContextCleared();
+    }
+
     public function test_tenant_middleware_rejects_requests_without_an_authenticated_user(): void
     {
         $request = Request::create('/', 'GET');
