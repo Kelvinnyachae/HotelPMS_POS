@@ -39,7 +39,7 @@ The final outcomes above were supplied for the review record. The original final
 
 ## Gate status
 
-G1 is **Passed** as a governance decision. G2 remains **Open / not passed** with local verification and successful hosted PostgreSQL 15–18 workflow [G2 tenant security proof #7](https://github.com/Kelvinnyachae/HotelPMS_POS/actions/runs/42415454278), including real session-loss eviction and runtime role/schema boundary checks, recorded in [G2 tenant runtime evidence](g2-tenant-runtime-evidence.md). External pool/long-lived worker and application-wide adversarial coverage, production migration-role review, and independent security review remain outstanding. There is no G2 acceptance record. G3–G7 remain **Open / not passed** without implementation evidence or verifier acceptance. “Resolved” in the finding traceability means the architecture response is specified; it does not mean deployment evidence exists.
+G1 is **Passed** as a governance decision. G2 remains **Open / not passed** with local verification, a Codex internal review, and successful hosted PostgreSQL 15–18 workflow [G2 tenant security proof #9](https://github.com/Kelvinnyachae/HotelPMS_POS/actions/runs/42416193658) recorded in [G2 tenant runtime evidence](g2-tenant-runtime-evidence.md). Application-wide adversarial coverage, external pool/long-lived worker behavior, production migration-role review, and independent security acceptance remain outstanding. There is no G2 acceptance record. G3–G7 remain **Open / not passed** without implementation evidence or verifier acceptance. “Resolved” in the finding traceability means the architecture response is specified; it does not mean deployment evidence exists.
 
 ## Git record
 
