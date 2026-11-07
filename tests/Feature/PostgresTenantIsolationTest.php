@@ -8,9 +8,11 @@ use Illuminate\Database\QueryException;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
+use PDO;
 use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\HttpKernel\Exception\HttpExceptionInterface;
 use Tests\TestCase;
+use Throwable;
 
 final class PostgresTenantIsolationTest extends TestCase
 {
@@ -202,6 +204,50 @@ final class PostgresTenantIsolationTest extends TestCase
             ->where('record_id', $rolledBackRecordId)
             ->count());
         $this->assertSame(0, $visibleAfterFailure);
+    }
+
+    public function test_connection_is_purged_when_postgres_terminates_it_during_tenant_work(): void
+    {
+        $adminUsername = getenv('G2_ADMIN_DB_USERNAME');
+        $adminPassword = getenv('G2_ADMIN_DB_PASSWORD');
+
+        if (! is_string($adminUsername) || $adminUsername === '' || ! is_string($adminPassword) || $adminPassword === '') {
+            $this->markTestSkipped('A disposable PostgreSQL administrator connection is required to terminate the test session.');
+        }
+
+        $connection = DB::connection('pgsql');
+        $backendPid = (int) $connection->selectOne('SELECT pg_backend_pid() AS backend_pid')->backend_pid;
+        $adminConnection = new PDO(
+            'pgsql:host='.getenv('PGHOST').' port='.getenv('PGPORT').' dbname=postgres',
+            $adminUsername,
+            $adminPassword,
+            [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION, PDO::ATTR_TIMEOUT => 5],
+        );
+
+        try {
+            app(TenantContext::class)->within(
+                'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+                '11111111-1111-4111-8111-111111111111',
+                function () use ($adminConnection, $backendPid): string {
+                    $termination = $adminConnection->prepare('SELECT pg_terminate_backend(:backend_pid)');
+                    $termination->execute(['backend_pid' => $backendPid]);
+                    $terminated = $termination->fetchColumn();
+                    $this->assertTrue(in_array($terminated, [true, 1, '1', 't'], true));
+
+                    return 'connection should be gone before transaction commit';
+                },
+            );
+            $this->fail('The transaction must fail after PostgreSQL terminates its connection.');
+        } catch (Throwable) {
+            // TenantContext must purge the dead Laravel connection after rollback also fails.
+        }
+
+        $replacementConnection = DB::connection('pgsql');
+        $replacementPid = (int) $replacementConnection->selectOne('SELECT pg_backend_pid() AS backend_pid')->backend_pid;
+
+        $this->assertNotSame($backendPid, $replacementPid);
+        $this->assertSame(0, $replacementConnection->transactionLevel());
+        $this->assertContextCleared();
     }
 
     public function test_client_supplied_tenant_headers_do_not_create_server_context(): void

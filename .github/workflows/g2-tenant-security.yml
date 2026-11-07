@@ -35,6 +35,8 @@ jobs:
       DB_USERNAME: dawineks_runtime
       DB_PASSWORD: g2-ci-runtime-only
       G2_DB_DATABASE: dawineks_hospitality_os
+      G2_ADMIN_DB_USERNAME: postgres
+      G2_ADMIN_DB_PASSWORD: postgres
       TENANT_CONTEXT_KEY: 0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
     steps:
       - uses: actions/checkout@v4
