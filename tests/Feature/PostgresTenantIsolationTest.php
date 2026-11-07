@@ -221,6 +221,60 @@ final class PostgresTenantIsolationTest extends TestCase
         }
     }
 
+    public function test_middleware_wraps_downstream_work_with_server_resolved_context_and_clears_it(): void
+    {
+        $accountId = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
+        $propertyId = '11111111-1111-4111-8111-111111111111';
+        $middleware = app(ApplyTenantContext::class);
+        $request = Request::create('/', 'GET');
+        $request->setUserResolver(fn (): object => new \stdClass);
+        $request->attributes->set('tenant.account_id', $accountId);
+        $request->attributes->set('tenant.property_id', $propertyId);
+
+        $response = $middleware->handle($request, function (Request $request) use ($accountId, $propertyId): Response {
+            $this->assertSame(1, DB::connection()->transactionLevel());
+            $context = DB::selectOne("SELECT current_setting('app.account_id', true) AS account_id, current_setting('app.property_id', true) AS property_id, length(current_setting('app.context_signature', true)) AS signature_length");
+            $this->assertSame($accountId, $context->account_id);
+            $this->assertSame($propertyId, $context->property_id);
+            $this->assertSame(64, $context->signature_length);
+
+            return new Response('tenant-scoped response');
+        });
+
+        $this->assertSame('tenant-scoped response', $response->getContent());
+        $this->assertSame(0, DB::connection()->transactionLevel());
+        $this->assertContextCleared();
+
+        $failingRequest = Request::create('/', 'GET');
+        $failingRequest->setUserResolver(fn (): object => new \stdClass);
+        $failingRequest->attributes->set('tenant.account_id', $accountId);
+        $failingRequest->attributes->set('tenant.property_id', $propertyId);
+
+        try {
+            $middleware->handle($failingRequest, function (): never {
+                throw new \RuntimeException('simulated downstream request failure');
+            });
+            $this->fail('A downstream exception must be rethrown after tenant context cleanup.');
+        } catch (\RuntimeException $exception) {
+            $this->assertSame('simulated downstream request failure', $exception->getMessage());
+        }
+
+        $this->assertSame(0, DB::connection()->transactionLevel());
+        $this->assertContextCleared();
+    }
+
+    public function test_tenant_middleware_rejects_requests_without_an_authenticated_user(): void
+    {
+        $request = Request::create('/', 'GET');
+
+        try {
+            app(ApplyTenantContext::class)->handle($request, fn (Request $request): Response => new Response);
+            $this->fail('Tenant middleware must reject unauthenticated requests.');
+        } catch (HttpExceptionInterface $exception) {
+            $this->assertSame(401, $exception->getStatusCode());
+        }
+    }
+
     private function assertContextCleared(): void
     {
         $context = DB::selectOne("SELECT current_setting('app.account_id', true) AS account_id, current_setting('app.property_id', true) AS property_id");
