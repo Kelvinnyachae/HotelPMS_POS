@@ -8,6 +8,8 @@ CREATE SCHEMA IF NOT EXISTS g2_proof AUTHORIZATION dawineks_owner;
 ALTER SCHEMA g2_proof OWNER TO dawineks_owner;
 CREATE SCHEMA IF NOT EXISTS tenant AUTHORIZATION dawineks_owner;
 ALTER SCHEMA tenant OWNER TO dawineks_owner;
+CREATE SCHEMA IF NOT EXISTS identity AUTHORIZATION dawineks_owner;
+ALTER SCHEMA identity OWNER TO dawineks_owner;
 
 SET ROLE dawineks_owner;
 
@@ -159,8 +161,10 @@ FROM g2_proof.tenant_records;
 RESET ROLE;
 
 REVOKE ALL ON SCHEMA g2_proof FROM PUBLIC;
+REVOKE ALL ON SCHEMA identity FROM PUBLIC;
 REVOKE CREATE ON SCHEMA public FROM PUBLIC;
 GRANT USAGE ON SCHEMA public TO dawineks_runtime;
+GRANT USAGE ON SCHEMA identity TO dawineks_runtime;
 REVOKE ALL ON FUNCTION g2_proof.current_account_id() FROM PUBLIC;
 REVOKE ALL ON FUNCTION g2_proof.current_property_id() FROM PUBLIC;
 REVOKE ALL ON FUNCTION g2_proof.valid_context() FROM PUBLIC;

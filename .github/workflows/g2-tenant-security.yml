@@ -38,7 +38,7 @@ jobs:
       G2_ADMIN_DB_USERNAME: postgres
       G2_ADMIN_DB_PASSWORD: postgres
       TENANT_CONTEXT_KEY: 0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
-      TENANT_MEMBERSHIP_TABLE: g2_proof.account_memberships
+      TENANT_MEMBERSHIP_TABLE: identity.account_memberships
     steps:
       - uses: actions/checkout@v4
 
@@ -58,11 +58,17 @@ jobs:
       - name: Install isolated RLS proof fixture
         run: psql -v ON_ERROR_STOP=1 -d dawineks_hospitality_os -f database/security/g2-proof-fixtures.sql
 
+      - name: Run identity migrations with administrator credentials
+        run: DB_CONNECTION=pgsql DB_USERNAME=postgres DB_PASSWORD=postgres php artisan migrate --force
+
       - name: Seed the CI-only tenant context signing key
         run: >-
           psql -v ON_ERROR_STOP=1 -d dawineks_hospitality_os
           -c "INSERT INTO g2_proof.context_keys (key_id, key_material)
           VALUES ('active', decode('${TENANT_CONTEXT_KEY}', 'hex'))"
+
+      - name: Install CI-only identity grants and membership fixtures
+        run: psql -v ON_ERROR_STOP=1 -d dawineks_hospitality_os -f database/security/g2-identity-ci-install.sql
 
       - name: Enforce tenant table policy coverage
         run: psql -v ON_ERROR_STOP=1 -d dawineks_hospitality_os -f database/security/assert-tenant-rls.sql

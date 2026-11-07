@@ -395,6 +395,47 @@ final class PostgresTenantIsolationTest extends TestCase
         $this->assertContextCleared();
     }
 
+    public function test_membership_resolver_rejects_a_suspended_identity_membership(): void
+    {
+        $result = app(TenantMembershipResolver::class)->withinMembership(
+            'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
+            'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
+            '22222222-2222-4222-8222-222222222222',
+            fn (): string => 'must not authorize',
+        );
+
+        $this->assertNull($result);
+        $this->assertContextCleared();
+    }
+
+    public function test_identity_memberships_use_forced_rls_and_owner_separation(): void
+    {
+        $table = DB::selectOne("SELECT c.relrowsecurity::text AS row_security,
+                                       c.relforcerowsecurity::text AS forced_row_security,
+                                       pg_get_userbyid(c.relowner) AS owner
+                                FROM pg_class c
+                                JOIN pg_namespace n ON n.oid = c.relnamespace
+                                WHERE n.nspname = 'identity'
+                                  AND c.relname = 'account_memberships'");
+
+        $this->assertNotNull($table);
+        $this->assertSame('true', $table->row_security);
+        $this->assertSame('true', $table->forced_row_security);
+        $this->assertSame('dawineks_owner', $table->owner);
+
+        $visibleMemberships = app(TenantContext::class)->withinPrincipal(
+            'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+            fn (): int => DB::table('identity.account_memberships')->count(),
+        );
+
+        $this->assertSame(1, $visibleMemberships);
+        $this->assertSame(0, DB::table('information_schema.role_table_grants')
+            ->where('table_schema', 'identity')
+            ->where('table_name', 'users')
+            ->where('grantee', 'dawineks_runtime')
+            ->count());
+    }
+
     public function test_tenant_middleware_rejects_requests_without_an_authenticated_user(): void
     {
         $request = Request::create('/', 'GET');

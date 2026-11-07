@@ -18,6 +18,8 @@ class User extends Authenticatable
     /** @use HasFactory<UserFactory> */
     use HasFactory, HasUuids, Notifiable;
 
+    protected $table = 'identity.users';
+
     /**
      * Get the attributes that should be cast.
      *
