@@ -38,6 +38,7 @@ jobs:
       G2_ADMIN_DB_USERNAME: postgres
       G2_ADMIN_DB_PASSWORD: postgres
       TENANT_CONTEXT_KEY: 0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
+      TENANT_MEMBERSHIP_TABLE: g2_proof.account_memberships
     steps:
       - uses: actions/checkout@v4
 

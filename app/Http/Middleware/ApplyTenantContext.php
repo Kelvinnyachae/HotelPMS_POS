@@ -2,19 +2,20 @@
 
 namespace App\Http\Middleware;
 
-use App\Tenancy\TenantContext;
+use App\Tenancy\TenantMembershipResolver;
 use Closure;
 use Illuminate\Http\Request;
 use Symfony\Component\HttpFoundation\Response;
 
 final class ApplyTenantContext
 {
-    public function __construct(private TenantContext $tenantContext) {}
+    public function __construct(
+        private TenantMembershipResolver $membershipResolver,
+    ) {}
 
     /**
-     * Apply only server-resolved membership values. A trusted membership
-     * resolver must populate these request attributes after authentication.
-     * Client headers, query values, and route parameters are never consulted.
+     * Request values select a desired account/property only. The authenticated
+     * principal's signed database membership is the authority for the context.
      *
      * @param  Closure(Request): Response  $next
      */
@@ -22,17 +23,18 @@ final class ApplyTenantContext
     {
         abort_unless($request->user() !== null, 401);
 
-        $accountId = $request->attributes->get('tenant.account_id');
-        $propertyId = $request->attributes->get('tenant.property_id');
+        $principalId = $request->user()->getAuthIdentifier();
+        abort_unless(is_string($principalId) || is_int($principalId), 403);
 
-        abort_unless(
-            is_string($accountId)
-            && is_string($propertyId)
-            && TenantContext::isValidUuid($accountId)
-            && TenantContext::isValidUuid($propertyId),
-            403,
+        $response = $this->membershipResolver->withinMembership(
+            (string) $principalId,
+            $request->input('account_id'),
+            $request->input('property_id'),
+            fn (): Response => $next($request),
         );
 
-        return $this->tenantContext->within($accountId, $propertyId, fn (): Response => $next($request));
+        abort_unless($response instanceof Response, 403);
+
+        return $response;
     }
 }

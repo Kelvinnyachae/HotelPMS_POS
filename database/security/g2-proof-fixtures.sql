@@ -23,6 +23,68 @@ CREATE TABLE IF NOT EXISTS g2_proof.context_keys (
     key_material bytea NOT NULL CHECK (octet_length(key_material) = 32)
 );
 
+CREATE TABLE IF NOT EXISTS g2_proof.account_memberships (
+    user_id uuid NOT NULL,
+    account_id uuid NOT NULL,
+    property_id uuid NOT NULL,
+    status text NOT NULL CHECK (status IN ('active', 'suspended', 'revoked')),
+    PRIMARY KEY (user_id, account_id, property_id)
+);
+
+INSERT INTO g2_proof.account_memberships (user_id, account_id, property_id, status)
+VALUES
+    ('aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', '11111111-1111-4111-8111-111111111111', 'active'),
+    ('bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb', 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb', '22222222-2222-4222-8222-222222222222', 'active')
+ON CONFLICT (user_id, account_id, property_id) DO UPDATE
+SET status = EXCLUDED.status;
+
+CREATE OR REPLACE FUNCTION g2_proof.valid_principal_context()
+RETURNS boolean
+LANGUAGE sql
+STABLE
+SECURITY DEFINER
+SET search_path = pg_catalog, g2_proof, public
+AS $$
+    SELECT COALESCE(
+        context.principal_id ~ '^[0-9a-fA-F]{8}-(?:[0-9a-fA-F]{4}-){3}[0-9a-fA-F]{12}$'
+        AND context.signature ~ '^[0-9a-fA-F]{64}$'
+        AND encode(
+            public.hmac(
+                convert_to('principal:' || lower(context.principal_id), 'UTF8'),
+                (SELECT key_material FROM g2_proof.context_keys WHERE key_id = 'active'),
+                'sha256'
+            ),
+            'hex'
+        ) = lower(context.signature),
+        false
+    )
+    FROM (
+        SELECT current_setting('app.principal_id', true) AS principal_id,
+               current_setting('app.principal_signature', true) AS signature
+    ) AS context
+$$;
+
+CREATE OR REPLACE FUNCTION g2_proof.current_principal_id()
+RETURNS uuid
+LANGUAGE sql
+STABLE
+AS $$
+    SELECT CASE WHEN g2_proof.valid_principal_context()
+                THEN lower(current_setting('app.principal_id', true))::uuid
+           END
+$$;
+
+ALTER TABLE g2_proof.account_memberships ENABLE ROW LEVEL SECURITY;
+ALTER TABLE g2_proof.account_memberships FORCE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS account_membership_principal_scope ON g2_proof.account_memberships;
+CREATE POLICY account_membership_principal_scope
+    ON g2_proof.account_memberships
+    FOR ALL
+    TO dawineks_runtime
+    USING (user_id = g2_proof.current_principal_id())
+    WITH CHECK (user_id = g2_proof.current_principal_id());
+
 CREATE OR REPLACE FUNCTION g2_proof.valid_context()
 RETURNS boolean
 LANGUAGE sql
@@ -102,10 +164,15 @@ GRANT USAGE ON SCHEMA public TO dawineks_runtime;
 REVOKE ALL ON FUNCTION g2_proof.current_account_id() FROM PUBLIC;
 REVOKE ALL ON FUNCTION g2_proof.current_property_id() FROM PUBLIC;
 REVOKE ALL ON FUNCTION g2_proof.valid_context() FROM PUBLIC;
+REVOKE ALL ON FUNCTION g2_proof.current_principal_id() FROM PUBLIC;
+REVOKE ALL ON FUNCTION g2_proof.valid_principal_context() FROM PUBLIC;
 REVOKE ALL ON TABLE g2_proof.context_keys FROM PUBLIC, dawineks_runtime;
 GRANT USAGE ON SCHEMA g2_proof TO dawineks_runtime;
 GRANT EXECUTE ON FUNCTION g2_proof.valid_context() TO dawineks_runtime;
 GRANT EXECUTE ON FUNCTION g2_proof.current_account_id() TO dawineks_runtime;
 GRANT EXECUTE ON FUNCTION g2_proof.current_property_id() TO dawineks_runtime;
+GRANT EXECUTE ON FUNCTION g2_proof.valid_principal_context() TO dawineks_runtime;
+GRANT EXECUTE ON FUNCTION g2_proof.current_principal_id() TO dawineks_runtime;
 GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE g2_proof.tenant_records TO dawineks_runtime;
+GRANT SELECT ON TABLE g2_proof.account_memberships TO dawineks_runtime;
 GRANT SELECT ON TABLE g2_proof.tenant_records_view TO dawineks_runtime;

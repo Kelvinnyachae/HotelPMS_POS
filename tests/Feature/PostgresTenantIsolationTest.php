@@ -3,6 +3,7 @@
 namespace Tests\Feature;
 
 use App\Http\Middleware\ApplyTenantContext;
+use App\Models\User;
 use App\Tenancy\TenantContext;
 use Illuminate\Database\QueryException;
 use Illuminate\Http\Request;
@@ -23,6 +24,7 @@ final class PostgresTenantIsolationTest extends TestCase
         config([
             'database.default' => 'pgsql',
             'database.connections.pgsql.database' => env('G2_DB_DATABASE', 'dawineks_hospitality_os'),
+            'tenancy.membership_table' => env('TENANT_MEMBERSHIP_TABLE', 'g2_proof.account_memberships'),
         ]);
 
         DB::purge('pgsql');
@@ -283,7 +285,7 @@ final class PostgresTenantIsolationTest extends TestCase
             'HTTP_X_ACCOUNT_ID' => 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
             'HTTP_X_PROPERTY_ID' => '11111111-1111-4111-8111-111111111111',
         ]);
-        $request->setUserResolver(fn (): object => new \stdClass);
+        $request->setUserResolver(fn (): User => $this->user('aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'));
         $middleware = app(ApplyTenantContext::class);
 
         try {
@@ -292,6 +294,8 @@ final class PostgresTenantIsolationTest extends TestCase
         } catch (HttpExceptionInterface $exception) {
             $this->assertSame(403, $exception->getStatusCode());
         }
+
+        $this->assertContextCleared();
     }
 
     public function test_middleware_wraps_downstream_work_with_server_resolved_context_and_clears_it(): void
@@ -299,10 +303,8 @@ final class PostgresTenantIsolationTest extends TestCase
         $accountId = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
         $propertyId = '11111111-1111-4111-8111-111111111111';
         $middleware = app(ApplyTenantContext::class);
-        $request = Request::create('/', 'GET');
-        $request->setUserResolver(fn (): object => new \stdClass);
-        $request->attributes->set('tenant.account_id', $accountId);
-        $request->attributes->set('tenant.property_id', $propertyId);
+        $request = Request::create('/', 'GET', ['account_id' => $accountId, 'property_id' => $propertyId]);
+        $request->setUserResolver(fn (): User => $this->user($accountId));
 
         $response = $middleware->handle($request, function (Request $request) use ($accountId, $propertyId): Response {
             $this->assertSame(1, DB::connection()->transactionLevel());
@@ -318,10 +320,8 @@ final class PostgresTenantIsolationTest extends TestCase
         $this->assertSame(0, DB::connection()->transactionLevel());
         $this->assertContextCleared();
 
-        $failingRequest = Request::create('/', 'GET');
-        $failingRequest->setUserResolver(fn (): object => new \stdClass);
-        $failingRequest->attributes->set('tenant.account_id', $accountId);
-        $failingRequest->attributes->set('tenant.property_id', $propertyId);
+        $failingRequest = Request::create('/', 'GET', ['account_id' => $accountId, 'property_id' => $propertyId]);
+        $failingRequest->setUserResolver(fn (): User => $this->user($accountId));
 
         try {
             $middleware->handle($failingRequest, function (): never {
@@ -333,6 +333,24 @@ final class PostgresTenantIsolationTest extends TestCase
         }
 
         $this->assertSame(0, DB::connection()->transactionLevel());
+        $this->assertContextCleared();
+    }
+
+    public function test_principal_cannot_select_another_principals_membership(): void
+    {
+        $request = Request::create('/', 'GET', [
+            'account_id' => 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
+            'property_id' => '22222222-2222-4222-8222-222222222222',
+        ]);
+        $request->setUserResolver(fn (): User => $this->user('aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'));
+
+        try {
+            app(ApplyTenantContext::class)->handle($request, fn (): Response => new Response);
+            $this->fail('A principal must not select another principal\'s membership.');
+        } catch (HttpExceptionInterface $exception) {
+            $this->assertSame(403, $exception->getStatusCode());
+        }
+
         $this->assertContextCleared();
     }
 
@@ -350,9 +368,22 @@ final class PostgresTenantIsolationTest extends TestCase
 
     private function assertContextCleared(): void
     {
-        $context = DB::selectOne("SELECT current_setting('app.account_id', true) AS account_id, current_setting('app.property_id', true) AS property_id");
+        $context = DB::selectOne("SELECT current_setting('app.account_id', true) AS account_id,
+                                         current_setting('app.property_id', true) AS property_id,
+                                         current_setting('app.principal_id', true) AS principal_id,
+                                         current_setting('app.principal_signature', true) AS principal_signature");
 
         $this->assertTrue($context->account_id === null || $context->account_id === '');
         $this->assertTrue($context->property_id === null || $context->property_id === '');
+        $this->assertTrue($context->principal_id === null || $context->principal_id === '');
+        $this->assertTrue($context->principal_signature === null || $context->principal_signature === '');
+    }
+
+    private function user(string $id): User
+    {
+        $user = new User;
+        $user->setAttribute('id', $id);
+
+        return $user;
     }
 }
