@@ -1,6 +1,6 @@
 # Implementation Gate Checklist
 
-**Status as of 2026-11-07:** **G1 Passed by Chairman disposition**; G2–G7 remain **Open / not passed**. G1 acceptance is governance evidence only; the package contains no implementation verification evidence. A gate closes only when its evidence is recorded, the named verification activity is completed, acceptance criteria are met, and the applicable authority records acceptance.
+**Status as of 2026-11-08:** **G1 Passed by Chairman disposition**; G2–G7 remain **Open / not passed**. G1 acceptance is governance evidence only; G2 has partial implementation verification evidence recorded, but not gate acceptance. A gate closes only when its evidence is recorded, the named verification activity is completed, acceptance criteria are met, and the applicable authority records acceptance.
 
 Passing a gate is necessary for the activity it blocks; it does not itself authorize application development. Chairman/KAB authorization and scoped work approval remain separate decisions. Hybrid active-active remains excluded at launch and is not authorized by passing any gate below.
 
@@ -18,7 +18,7 @@ Passing a gate is necessary for the activity it blocks; it does not itself autho
 - **Verification activity / responsible:** Security and platform engineering execute adversarial tests under production-like non-owner roles; database owner reviews grants, RLS, view behavior and reset failures; independent reviewer records results.
 - **Acceptance criteria:** Runtime cannot bypass RLS or access another account/property; missing/stale context fails closed; no context survives alternating requests/jobs or pool reuse; unsafe access and unprotected tenant tables are detected; reset failure evicts the connection.
 - **Blocks:** Creation/use of tenant business tables and any tenant-scoped business module.
-- **Status:** [ ] Open — local core verification passed (7 PostgreSQL tests plus 2 rollback/purge unit tests; 15 assertions in the focused unit file). Hosted workflow [G2 tenant security proof #9](https://github.com/Kelvinnyachae/HotelPMS_POS/actions/runs/42416193658) passed on commit `11be82a` across PostgreSQL 15–18, including forced-RLS coverage, runtime role/schema boundaries, middleware context cleanup, and a real backend-loss test that asserts Laravel purges and replaces its failed connection object; see [G2 tenant runtime evidence](g2-tenant-runtime-evidence.md). Application-wide adversarial coverage, external pool/long-lived worker behavior, production migration-role review, and independent security acceptance remain outstanding. Remaining verification is authorized by the Chairman; see [Chairman G2 verification authorization](chairman-g2-verification-authorization.md).
+- **Status:** [ ] Open — hosted workflow [G2 tenant security proof #16](https://github.com/Kelvinnyachae/HotelPMS_POS/actions/runs/42419303016) passed on commit `2cbd49f` across PostgreSQL 15–18. It verifies forced RLS, runtime role/schema boundaries, context cleanup, real backend-loss eviction, UUIDv7 user identifiers, signed principal membership lookup from isolated fixtures, cross-principal denial, and middleware context application. See [G2 tenant runtime evidence](g2-tenant-runtime-evidence.md). Production identity/grant review, application-wide adversarial coverage, external pool/long-lived worker behavior, and independent security acceptance remain outstanding. G2 remains Open; tenant business tables and modules stay blocked. Remaining verification is authorized by the Chairman; see [Chairman G2 verification authorization](chairman-g2-verification-authorization.md).
 
 ## G3 — Ledger immutability
 
@@ -65,7 +65,7 @@ Passing a gate is necessary for the activity it blocks; it does not itself autho
 | Gate | Status | Evidence reference | Verifier / acceptance record |
 | --- | --- | --- | --- |
 | G1 | Passed — governance decision | chairman-g1-task007-authorization.md | Chairman authorization recorded 2026-11-06 |
-| G2 | Open — core local verification passed; remaining verification authorized | g2-tenant-runtime-evidence.md; chairman-g2-verification-authorization.md | 7 PostgreSQL tests + 1 rollback-failure unit test; 37 assertions total; no G2 acceptance record |
+| G2 | Open — hosted PostgreSQL 15–18 core verification passed; remaining verification authorized | g2-tenant-runtime-evidence.md; chairman-g2-verification-authorization.md | Run #16 at commit `2cbd49f`; membership proof uses isolated fixtures; no G2 acceptance record |
 | G3 | Open — not passed | None recorded | None |
 | G4 | Open — not passed | None recorded | None |
 | G5 | Open — not passed | None recorded | None |
