@@ -246,6 +246,20 @@ final class PostgresTenantIsolationTest extends TestCase
                     $terminated = $termination->fetchColumn();
                     $this->assertTrue(in_array($terminated, [true, 1, '1', 't'], true));
 
+                    $deadline = microtime(true) + 5;
+                    do {
+                        $activity = $adminConnection->prepare('SELECT EXISTS (SELECT 1 FROM pg_stat_activity WHERE pid = :backend_pid)');
+                        $activity->execute(['backend_pid' => $backendPid]);
+                        $backendStillActive = $activity->fetchColumn();
+                        if (! in_array($backendStillActive, [true, 1, '1', 't'], true)) {
+                            break;
+                        }
+
+                        usleep(50000);
+                    } while (microtime(true) < $deadline);
+
+                    $this->assertFalse(in_array($backendStillActive, [true, 1, '1', 't'], true));
+
                     return 'connection should be gone before transaction commit';
                 },
             );
@@ -257,6 +271,7 @@ final class PostgresTenantIsolationTest extends TestCase
         $replacementConnection = DB::connection('pgsql');
         $replacementPid = (int) $replacementConnection->selectOne('SELECT pg_backend_pid() AS backend_pid')->backend_pid;
 
+        $this->assertNotSame(spl_object_id($connection), spl_object_id($replacementConnection));
         $this->assertNotSame($backendPid, $replacementPid);
         $this->assertSame(0, $replacementConnection->transactionLevel());
         $this->assertContextCleared();

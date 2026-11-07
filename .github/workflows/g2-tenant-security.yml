@@ -67,4 +67,4 @@ jobs:
         run: psql -v ON_ERROR_STOP=1 -d dawineks_hospitality_os -f database/security/assert-tenant-rls.sql
 
       - name: Test tenant isolation under the runtime login
-        run: php artisan test --compact tests/Feature/PostgresTenantIsolationTest.php
+        run: php artisan test --compact tests/Feature

@@ -3,6 +3,7 @@
 namespace App\Tenancy;
 
 use Closure;
+use Illuminate\Database\LostConnectionDetector;
 use Illuminate\Support\Facades\DB;
 use InvalidArgumentException;
 use LogicException;
@@ -52,12 +53,18 @@ final class TenantContext
                 return $callback();
             });
         } catch (Throwable $exception) {
+            $purgeConnection = (new LostConnectionDetector)->causedByLostConnection($exception);
+
             if ($connection->transactionLevel() > 0) {
                 try {
                     $connection->rollBack();
                 } catch (Throwable) {
-                    DB::purge($connection->getName());
+                    $purgeConnection = true;
                 }
+            }
+
+            if ($purgeConnection) {
+                DB::purge($connection->getName());
             }
 
             throw $exception;
