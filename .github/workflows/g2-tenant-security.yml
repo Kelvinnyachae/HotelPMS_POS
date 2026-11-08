@@ -87,6 +87,9 @@ jobs:
       - name: Enforce tenant table policy coverage
         run: psql -v ON_ERROR_STOP=1 -d dawineks_hospitality_os -f database/security/assert-tenant-rls.sql
 
+      - name: Generate an ephemeral Laravel test encryption key
+        run: echo "APP_KEY=base64:$(openssl rand -base64 32)" >> "$GITHUB_ENV"
+
       - name: Test tenant isolation under the runtime login
         run: |
           set +e
