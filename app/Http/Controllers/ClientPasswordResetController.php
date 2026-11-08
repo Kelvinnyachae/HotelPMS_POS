@@ -8,6 +8,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\Str;
@@ -32,6 +33,12 @@ final class ClientPasswordResetController extends Controller
         $rateKey = 'password-reset:'.hash('sha256', $email.'|'.$request->ip());
 
         if (RateLimiter::tooManyAttempts($rateKey, 3)) {
+            return back()->with('status', self::GENERIC_STATUS);
+        }
+
+        if (! $this->canDeliverSecureResetLink()) {
+            Log::warning('Password reset suppressed because secure URL or mail delivery is not configured.');
+
             return back()->with('status', self::GENERIC_STATUS);
         }
 
@@ -71,6 +78,14 @@ final class ClientPasswordResetController extends Controller
             throw ValidationException::withMessages(['password' => 'The password must be 72 bytes or fewer.']);
         }
 
+        $rateKey = 'password-reset-complete:'.hash('sha256', (string) $request->ip());
+        if (RateLimiter::tooManyAttempts($rateKey, 10)) {
+            throw ValidationException::withMessages([
+                'email' => 'The reset link could not be verified. Request a new link and try again later.',
+            ]);
+        }
+        RateLimiter::hit($rateKey, 900);
+
         $completed = DB::selectOne(
             'SELECT security.complete_client_password_reset(?, ?, ?)::text AS completed',
             [
@@ -86,6 +101,8 @@ final class ClientPasswordResetController extends Controller
             ]);
         }
 
+        RateLimiter::clear($rateKey);
+
         Auth::logout();
         $request->session()->invalidate();
         $request->session()->regenerateToken();
@@ -96,5 +113,19 @@ final class ClientPasswordResetController extends Controller
     private function databaseBoolean(mixed $value): bool
     {
         return $value === true || $value === 't' || $value === 'true' || $value === '1' || $value === 1;
+    }
+
+    private function canDeliverSecureResetLink(): bool
+    {
+        if (app()->environment(['local', 'testing'])) {
+            return true;
+        }
+
+        $scheme = parse_url((string) config('app.url'), PHP_URL_SCHEME);
+        $mailer = (array) config('mail.mailers.'.config('mail.default'), []);
+        $usesLogTransport = ($mailer['transport'] ?? null) === 'log'
+            || in_array('log', (array) ($mailer['mailers'] ?? []), true);
+
+        return strtolower((string) $scheme) === 'https' && ! $usesLogTransport;
     }
 }

@@ -118,6 +118,7 @@ return new class extends Migration
                 client_user_id uuid;
                 client_email varchar;
                 reset_token text;
+                changed_rows integer;
             BEGIN
                 IF target_email IS NULL OR length(target_email) > 254 THEN
                     RETURN;
@@ -145,7 +146,14 @@ return new class extends Migration
                 ON CONFLICT (user_id) DO UPDATE
                 SET token_digest = EXCLUDED.token_digest,
                     expires_at = EXCLUDED.expires_at,
-                    created_at = EXCLUDED.created_at;
+                    created_at = EXCLUDED.created_at
+                WHERE security.client_password_reset_tokens.created_at <= now() - interval '1 minute';
+
+                GET DIAGNOSTICS changed_rows = ROW_COUNT;
+
+                IF changed_rows <> 1 THEN
+                    RETURN;
+                END IF;
 
                 RETURN QUERY SELECT client_email, reset_token;
             END;

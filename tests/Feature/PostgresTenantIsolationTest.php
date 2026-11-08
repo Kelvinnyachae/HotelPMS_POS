@@ -407,6 +407,7 @@ final class PostgresTenantIsolationTest extends TestCase
         $propertyId = '11111111-1111-4111-8111-111111111111';
 
         $this->actingAs($this->user($accountId))
+            ->withSession(['auth.auth_version' => 1])
             ->get('/workspace?account_id='.$accountId.'&property_id='.$propertyId)
             ->assertOk()
             ->assertSee('Client Workspace');
@@ -548,6 +549,8 @@ final class PostgresTenantIsolationTest extends TestCase
 
         $this->post(route('password.email'), ['email' => $email])
             ->assertSessionHas('status', 'If an active account matches that email, a password reset link will be sent.');
+        $cooldownReset = DB::selectOne('SELECT * FROM security.issue_client_password_reset(?)', [$email]);
+        $this->assertNull($cooldownReset);
         $sentMail = Mail::sent(ClientPasswordResetMail::class)->first();
         $this->assertInstanceOf(ClientPasswordResetMail::class, $sentMail);
 
@@ -588,6 +591,26 @@ final class PostgresTenantIsolationTest extends TestCase
             [$email, $token, Hash::make('Another secure password 2026')],
         )->completed;
         $this->assertSame('false', $reused);
+    }
+
+    public function test_password_reset_is_suppressed_when_production_mail_or_url_is_insecure(): void
+    {
+        Mail::fake();
+        $this->app->instance('env', 'production');
+        config([
+            'app.url' => 'http://localhost',
+            'mail.default' => 'log',
+        ]);
+
+        $this->post(route('password.email'), ['email' => 'g2-reset@example.invalid'])
+            ->assertSessionHas('status', 'If an active account matches that email, a password reset link will be sent.');
+
+        Mail::assertNothingSent();
+        $reset = DB::selectOne(
+            'SELECT * FROM security.issue_client_password_reset(?)',
+            ['g2-reset@example.invalid'],
+        );
+        $this->assertNull($reset);
     }
 
     public function test_principal_cannot_select_another_principals_membership(): void
