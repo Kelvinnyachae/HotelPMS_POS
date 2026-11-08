@@ -46,10 +46,11 @@ final class ClientPasswordResetController extends Controller
         $reset = DB::selectOne('SELECT * FROM security.issue_client_password_reset(?)', [$email]);
 
         if ($reset && is_string($reset->email) && is_string($reset->token)) {
-            $resetUrl = route('password.reset.form', [
+            $resetPath = route('password.reset.form', [
                 'token' => $reset->token,
                 'email' => $reset->email,
-            ]);
+            ], false);
+            $resetUrl = rtrim((string) config('app.url'), '/').$resetPath;
             Mail::to($reset->email)->send(new ClientPasswordResetMail($resetUrl));
         }
 

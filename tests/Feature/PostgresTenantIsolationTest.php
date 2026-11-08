@@ -537,6 +537,7 @@ final class PostgresTenantIsolationTest extends TestCase
     public function test_password_reset_token_is_single_use_and_revokes_old_sessions(): void
     {
         Mail::fake();
+        config(['app.url' => 'https://hotel.example']);
 
         $email = 'g2-reset@example.invalid';
         $this->post('/login', [
@@ -548,7 +549,8 @@ final class PostgresTenantIsolationTest extends TestCase
         $this->assertSame(1, $oldUser->authVersion);
         $this->assertSame(1, session('auth.auth_version'));
 
-        $this->post(route('password.email'), ['email' => $email])
+        $this->withHeader('Host', 'attacker.example')
+            ->post('/password/forgot', ['email' => $email])
             ->assertSessionHas('status', 'If an active account matches that email, a password reset link will be sent.');
         $cooldownReset = DB::selectOne('SELECT * FROM security.issue_client_password_reset(?)', [$email]);
         $this->assertNull($cooldownReset);
@@ -556,6 +558,7 @@ final class PostgresTenantIsolationTest extends TestCase
         $this->assertInstanceOf(ClientPasswordResetMail::class, $sentMail);
 
         $urlParts = parse_url($sentMail->resetUrl);
+        $this->assertSame('hotel.example', $urlParts['host'] ?? null);
         parse_str($urlParts['query'] ?? '', $query);
         $token = basename($urlParts['path'] ?? '');
         $this->assertSame($email, $query['email'] ?? null);
