@@ -64,6 +64,98 @@ return new class extends Migration
             FOR ALL TO dawineks_owner USING (true) WITH CHECK (true)
             SQL);
 
+        DB::statement(<<<'SQL'
+            CREATE FUNCTION security.has_active_membership(target_account uuid, target_property uuid)
+            RETURNS boolean
+            LANGUAGE sql
+            STABLE
+            SECURITY DEFINER
+            SET search_path = pg_catalog, security, identity
+            AS $function$
+                SELECT COALESCE(
+                    security.valid_principal_context()
+                    AND EXISTS (
+                        SELECT 1
+                        FROM identity.account_memberships AS membership
+                        WHERE membership.user_id = security.current_principal_id()
+                          AND membership.account_id = target_account
+                          AND membership.property_id = target_property
+                          AND membership.status = 'active'
+                    ),
+                    false
+                )
+            $function$
+            SQL);
+
+        DB::statement(<<<'SQL'
+            CREATE FUNCTION security.valid_tenant_context()
+            RETURNS boolean
+            LANGUAGE sql
+            STABLE
+            SECURITY DEFINER
+            SET search_path = pg_catalog, security, identity
+            AS $function$
+                SELECT COALESCE(
+                    context.account_id ~ '^[0-9a-fA-F]{8}-(?:[0-9a-fA-F]{4}-){3}[0-9a-fA-F]{12}$'
+                    AND context.property_id ~ '^[0-9a-fA-F]{8}-(?:[0-9a-fA-F]{4}-){3}[0-9a-fA-F]{12}$'
+                    AND context.signature ~ '^[0-9a-fA-F]{64}$'
+                    AND security.valid_principal_context()
+                    AND encode(
+                        public.hmac(
+                            convert_to(lower(current_setting('app.principal_id', true)) || ':' || lower(context.account_id) || ':' || lower(context.property_id) || ':' || txid_current()::text, 'UTF8'),
+                            (SELECT key_material FROM security.context_keys WHERE is_active),
+                            'sha256'
+                        ),
+                        'hex'
+                    ) = lower(context.signature)
+                    AND CASE
+                        WHEN context.account_id ~ '^[0-9a-fA-F]{8}-(?:[0-9a-fA-F]{4}-){3}[0-9a-fA-F]{12}$'
+                         AND context.property_id ~ '^[0-9a-fA-F]{8}-(?:[0-9a-fA-F]{4}-){3}[0-9a-fA-F]{12}$'
+                        THEN security.has_active_membership(lower(context.account_id)::uuid, lower(context.property_id)::uuid)
+                        ELSE false
+                    END,
+                    false
+                )
+                FROM (
+                    SELECT current_setting('app.account_id', true) AS account_id,
+                           current_setting('app.property_id', true) AS property_id,
+                           current_setting('app.context_signature', true) AS signature
+                ) AS context
+            $function$
+            SQL);
+
+        DB::statement(<<<'SQL'
+            CREATE FUNCTION security.current_account_id()
+            RETURNS uuid
+            LANGUAGE sql
+            STABLE
+            AS $function$
+                SELECT CASE WHEN security.valid_tenant_context()
+                            THEN lower(current_setting('app.account_id', true))::uuid
+                       END
+            $function$
+            SQL);
+
+        DB::statement(<<<'SQL'
+            CREATE FUNCTION security.current_property_id()
+            RETURNS uuid
+            LANGUAGE sql
+            STABLE
+            AS $function$
+                SELECT CASE WHEN security.valid_tenant_context()
+                            THEN lower(current_setting('app.property_id', true))::uuid
+                       END
+            $function$
+            SQL);
+
+        DB::statement('REVOKE ALL ON FUNCTION security.has_active_membership(uuid, uuid) FROM PUBLIC');
+        DB::statement('REVOKE ALL ON FUNCTION security.valid_tenant_context() FROM PUBLIC');
+        DB::statement('REVOKE ALL ON FUNCTION security.current_account_id() FROM PUBLIC');
+        DB::statement('REVOKE ALL ON FUNCTION security.current_property_id() FROM PUBLIC');
+        DB::statement('GRANT EXECUTE ON FUNCTION security.valid_tenant_context() TO dawineks_runtime');
+        DB::statement('GRANT EXECUTE ON FUNCTION security.current_account_id() TO dawineks_runtime');
+        DB::statement('GRANT EXECUTE ON FUNCTION security.current_property_id() TO dawineks_runtime');
+
         DB::statement('REVOKE ALL ON ALL TABLES IN SCHEMA identity FROM PUBLIC, dawineks_runtime');
         DB::statement('GRANT USAGE ON SCHEMA identity TO dawineks_runtime');
         DB::statement('GRANT SELECT ON TABLE identity.account_memberships TO dawineks_runtime');

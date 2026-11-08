@@ -69,28 +69,8 @@ CREATE OR REPLACE FUNCTION g2_proof.valid_context()
 RETURNS boolean
 LANGUAGE sql
 STABLE
-SECURITY DEFINER
-SET search_path = pg_catalog, g2_proof, public
 AS $$
-    SELECT COALESCE(
-        context.account_id ~ '^[0-9a-fA-F]{8}-(?:[0-9a-fA-F]{4}-){3}[0-9a-fA-F]{12}$'
-        AND context.property_id ~ '^[0-9a-fA-F]{8}-(?:[0-9a-fA-F]{4}-){3}[0-9a-fA-F]{12}$'
-        AND context.signature ~ '^[0-9a-fA-F]{64}$'
-        AND encode(
-            public.hmac(
-                convert_to(lower(context.account_id) || ':' || lower(context.property_id), 'UTF8'),
-                (SELECT key_material FROM security.context_keys WHERE is_active),
-                'sha256'
-            ),
-            'hex'
-        ) = lower(context.signature),
-        false
-    )
-    FROM (
-        SELECT current_setting('app.account_id', true) AS account_id,
-               current_setting('app.property_id', true) AS property_id,
-               current_setting('app.context_signature', true) AS signature
-    ) AS context
+    SELECT security.valid_tenant_context()
 $$;
 
 CREATE OR REPLACE FUNCTION g2_proof.current_account_id()
@@ -98,9 +78,7 @@ RETURNS uuid
 LANGUAGE sql
 STABLE
 AS $$
-    SELECT CASE WHEN g2_proof.valid_context()
-                THEN lower(current_setting('app.account_id', true))::uuid
-           END
+    SELECT security.current_account_id()
 $$;
 
 CREATE OR REPLACE FUNCTION g2_proof.current_property_id()
@@ -108,9 +86,7 @@ RETURNS uuid
 LANGUAGE sql
 STABLE
 AS $$
-    SELECT CASE WHEN g2_proof.valid_context()
-                THEN lower(current_setting('app.property_id', true))::uuid
-           END
+    SELECT security.current_property_id()
 $$;
 
 ALTER TABLE g2_proof.tenant_records ENABLE ROW LEVEL SECURITY;
