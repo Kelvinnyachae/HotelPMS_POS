@@ -33,13 +33,13 @@ final class ClientPasswordResetController extends Controller
         $rateKey = 'password-reset:'.hash('sha256', $email.'|'.$request->ip());
 
         if (RateLimiter::tooManyAttempts($rateKey, 3)) {
-            return back()->with('status', self::GENERIC_STATUS);
+            return $this->genericRequestResponse();
         }
 
         if (! $this->canDeliverSecureResetLink()) {
             Log::warning('Password reset suppressed because secure URL or mail delivery is not configured.');
 
-            return back()->with('status', self::GENERIC_STATUS);
+            return $this->genericRequestResponse();
         }
 
         RateLimiter::hit($rateKey, 900);
@@ -53,7 +53,7 @@ final class ClientPasswordResetController extends Controller
             Mail::to($reset->email)->send(new ClientPasswordResetMail($resetUrl));
         }
 
-        return back()->with('status', self::GENERIC_STATUS);
+        return $this->genericRequestResponse();
     }
 
     public function resetForm(Request $request, string $token): View
@@ -113,6 +113,11 @@ final class ClientPasswordResetController extends Controller
     private function databaseBoolean(mixed $value): bool
     {
         return $value === true || $value === 't' || $value === 'true' || $value === '1' || $value === 1;
+    }
+
+    private function genericRequestResponse(): RedirectResponse
+    {
+        return redirect()->route('password.forgot')->with('status', self::GENERIC_STATUS);
     }
 
     private function canDeliverSecureResetLink(): bool

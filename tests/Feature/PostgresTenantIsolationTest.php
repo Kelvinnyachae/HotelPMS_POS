@@ -603,6 +603,7 @@ final class PostgresTenantIsolationTest extends TestCase
         ]);
 
         $this->post(route('password.email'), ['email' => 'g2-reset@example.invalid'])
+            ->assertRedirect(route('password.forgot'))
             ->assertSessionHas('status', 'If an active account matches that email, a password reset link will be sent.');
 
         Mail::assertNothingSent();
