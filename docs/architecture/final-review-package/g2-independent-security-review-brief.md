@@ -18,7 +18,7 @@ Review the tenant/runtime security foundation and identity-membership authorizat
 - Core proof and setup: `database/security/g2-proof-fixtures.sql`, `database/security/g2-identity-ci-install.sql`, `.github/workflows/g2-tenant-security.yml`
 - Application path: `app/Tenancy/TenantContext.php`, `app/Tenancy/TenantMembershipResolver.php`, `app/Http/Middleware/ApplyTenantContext.php`, `app/Models/User.php`
 - Tests: `tests/Feature/PostgresTenantIsolationTest.php`, `tests/Feature/TenantContextConnectionFailureTest.php`
-- Latest hosted CI: [Run #45, PostgreSQL 15–18](https://github.com/Kelvinnyachae/HotelPMS_POS/actions/runs/42507556691)
+- Latest hosted CI: [Run #47, PostgreSQL 15–18](https://github.com/Kelvinnyachae/HotelPMS_POS/actions/runs/42509162294)
 
 ## Review questions
 
@@ -31,9 +31,9 @@ Review the tenant/runtime security foundation and identity-membership authorizat
 
 ## Known evidence limits
 
-- Run #45 verifies the configured PostgreSQL proof fixtures, CI identity-table path, client sign-in, client-administrator MFA flows, and password-reset tests; it does not establish production deployment, production identity provisioning, or production key custody.
+- Run #47 verifies the configured PostgreSQL proof fixtures, CI identity-table path, client sign-in, client-administrator MFA flows, password-reset tests, and resistance to a forged Host header in reset-link generation; it does not establish production deployment, production identity provisioning, or production key custody.
 - The CI installer uses disposable identity users and CI-only signing/encryption keys.
-- POS device enrollment and shift-bound sessions, framework-wide tenant-scope coverage, external pool/long-lived worker behavior, production identity provisioning and grant review remain open. Password-reset functionality has CI coverage in run #45, but production delivery and deployment remain unqualified.
+- POS device enrollment and shift-bound sessions, framework-wide tenant-scope coverage, external pool/long-lived worker behavior, production identity provisioning and grant review remain open. Password-reset functionality has CI coverage in run #47, but production delivery and deployment remain unqualified.
 
 ## Handling
 
