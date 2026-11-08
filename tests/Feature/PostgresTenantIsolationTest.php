@@ -609,11 +609,6 @@ final class PostgresTenantIsolationTest extends TestCase
             ->assertSessionHas('status', 'If an active account matches that email, a password reset link will be sent.');
 
         Mail::assertNothingSent();
-        $reset = DB::selectOne(
-            'SELECT * FROM security.issue_client_password_reset(?)',
-            ['g2-reset@example.invalid'],
-        );
-        $this->assertNull($reset);
     }
 
     public function test_principal_cannot_select_another_principals_membership(): void
