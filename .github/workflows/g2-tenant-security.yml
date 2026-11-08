@@ -88,4 +88,13 @@ jobs:
         run: psql -v ON_ERROR_STOP=1 -d dawineks_hospitality_os -f database/security/assert-tenant-rls.sql
 
       - name: Test tenant isolation under the runtime login
-        run: php artisan test --compact tests/Feature
+        run: |
+          set +e
+          php artisan test --compact tests/Feature > "$RUNNER_TEMP/g2-feature-tests.log" 2>&1
+          test_status=$?
+          cat "$RUNNER_TEMP/g2-feature-tests.log"
+          if [ "$test_status" -ne 0 ]; then
+            echo '## G2 feature test failure' >> "$GITHUB_STEP_SUMMARY"
+            cat "$RUNNER_TEMP/g2-feature-tests.log" >> "$GITHUB_STEP_SUMMARY"
+          fi
+          exit "$test_status"
