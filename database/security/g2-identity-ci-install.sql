@@ -3,9 +3,9 @@
 
 INSERT INTO identity.users (id, name, email, password, created_at, updated_at)
 VALUES
-    ('aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', 'G2 Principal A', 'g2-a@example.invalid', 'ci-only', now(), now()),
-    ('bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb', 'G2 Principal B', 'g2-b@example.invalid', 'ci-only', now(), now()),
-    ('cccccccc-cccc-4ccc-8ccc-cccccccccccc', 'G2 Principal C', 'g2-c@example.invalid', 'ci-only', now(), now())
+    ('aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', 'G2 Principal A', 'g2-a@example.invalid', '$2y$04$J0Q/AWwgUK5RRfx2SILHJOSv/kSq.MEI3lMZJAUkHyFR034ZhZyci', now(), now()),
+    ('bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb', 'G2 Principal B', 'g2-b@example.invalid', '$2y$04$J0Q/AWwgUK5RRfx2SILHJOSv/kSq.MEI3lMZJAUkHyFR034ZhZyci', now(), now()),
+    ('cccccccc-cccc-4ccc-8ccc-cccccccccccc', 'G2 Principal C', 'g2-c@example.invalid', '$2y$04$J0Q/AWwgUK5RRfx2SILHJOSv/kSq.MEI3lMZJAUkHyFR034ZhZyci', now(), now())
 ON CONFLICT (id) DO NOTHING;
 
 INSERT INTO identity.account_memberships (user_id, account_id, property_id, status)

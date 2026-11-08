@@ -9,6 +9,7 @@ use App\Tenancy\TenantMembershipResolver;
 use Closure;
 use Illuminate\Database\QueryException;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Route;
 use Illuminate\Support\Str;
@@ -407,6 +408,38 @@ final class PostgresTenantIsolationTest extends TestCase
             ->assertSee('Client Workspace');
 
         $this->assertContextCleared();
+    }
+
+    public function test_client_sign_in_verifies_credentials_without_reading_password_hashes(): void
+    {
+        $this->post('/login', [
+            'email' => 'G2-A@EXAMPLE.INVALID',
+            'password' => 'G2 CI fixture password',
+        ])->assertRedirect(route('home'));
+
+        $this->assertAuthenticated();
+        $this->assertSame(0, DB::table('information_schema.role_table_grants')
+            ->where('table_schema', 'identity')
+            ->where('table_name', 'users')
+            ->where('grantee', 'dawineks_runtime')
+            ->where('privilege_type', 'SELECT')
+            ->count());
+
+        Auth::forgetGuards();
+        $this->get('/workspace?account_id=aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa&property_id=11111111-1111-4111-8111-111111111111')
+            ->assertOk()
+            ->assertSee('Client Workspace');
+        $this->assertContextCleared();
+    }
+
+    public function test_client_sign_in_rejects_an_incorrect_password(): void
+    {
+        $this->post('/login', [
+            'email' => 'g2-a@example.invalid',
+            'password' => 'incorrect fixture password',
+        ])->assertSessionHasErrors('email');
+
+        $this->assertGuest();
     }
 
     public function test_principal_cannot_select_another_principals_membership(): void

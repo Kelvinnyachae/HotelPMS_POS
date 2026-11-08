@@ -30,6 +30,24 @@ BEGIN
         RAISE EXCEPTION 'The runtime role must not directly read identity.users';
     END IF;
 
+    IF NOT has_function_privilege('dawineks_runtime', 'security.authenticate_client_user(text, text)', 'EXECUTE')
+       OR NOT has_function_privilege('dawineks_runtime', 'security.load_client_user(uuid)', 'EXECUTE') THEN
+        RAISE EXCEPTION 'Runtime authentication functions are not executable';
+    END IF;
+
+    IF NOT (SELECT procedure.prosecdef
+            FROM pg_proc AS procedure
+            WHERE procedure.oid = 'security.authenticate_client_user(text, text)'::regprocedure)
+       OR NOT (SELECT procedure.prosecdef
+               FROM pg_proc AS procedure
+               WHERE procedure.oid = 'security.load_client_user(uuid)'::regprocedure) THEN
+        RAISE EXCEPTION 'Authentication functions must use SECURITY DEFINER';
+    END IF;
+
+    IF position('password' IN pg_get_function_result('security.authenticate_client_user(text, text)'::regprocedure)) > 0 THEN
+        RAISE EXCEPTION 'The authentication function must not return password material';
+    END IF;
+
     IF has_table_privilege('dawineks_runtime', 'security.context_keys', 'SELECT') THEN
         RAISE EXCEPTION 'The runtime role must not read identity signing key material';
     END IF;

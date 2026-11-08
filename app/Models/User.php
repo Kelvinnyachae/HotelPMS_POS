@@ -20,6 +20,9 @@ class User extends Authenticatable
 
     protected $table = 'identity.users';
 
+    /** Set only by SecurityClientUserProvider after database-side verification. */
+    public bool $credentialsVerified = false;
+
     /**
      * Get the attributes that should be cast.
      *
