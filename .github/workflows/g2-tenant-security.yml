@@ -37,7 +37,6 @@ jobs:
       G2_DB_DATABASE: dawineks_hospitality_os
       G2_ADMIN_DB_USERNAME: postgres
       G2_ADMIN_DB_PASSWORD: postgres
-      TENANT_CONTEXT_KEY: 0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
       TENANT_MEMBERSHIP_TABLE: identity.account_memberships
     steps:
       - uses: actions/checkout@v4
@@ -74,6 +73,9 @@ jobs:
         run: psql -v ON_ERROR_STOP=1 -d dawineks_hospitality_os -f database/security/g2-proof-fixtures.sql
 
       - name: Seed the CI-only tenant context signing key
+        run: echo "TENANT_CONTEXT_KEY=$(openssl rand -hex 32)" >> "$GITHUB_ENV"
+
+      - name: Insert the ephemeral CI-only tenant context signing key
         run: >-
           psql -v ON_ERROR_STOP=1 -d dawineks_hospitality_os
           -c "INSERT INTO security.context_keys (key_id, key_material, is_active)
