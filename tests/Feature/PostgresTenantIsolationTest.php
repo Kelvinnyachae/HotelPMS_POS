@@ -10,6 +10,7 @@ use App\Tenancy\TenantContext;
 use App\Tenancy\TenantMembershipResolver;
 use Closure;
 use Illuminate\Database\QueryException;
+use Illuminate\Foundation\Http\Middleware\PreventRequestForgery;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
@@ -596,6 +597,7 @@ final class PostgresTenantIsolationTest extends TestCase
     public function test_password_reset_is_suppressed_when_production_mail_or_url_is_insecure(): void
     {
         Mail::fake();
+        $this->withoutMiddleware(PreventRequestForgery::class);
         $this->app->instance('env', 'production');
         config([
             'app.url' => 'http://localhost',
