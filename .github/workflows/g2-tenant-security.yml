@@ -58,9 +58,6 @@ jobs:
       - name: Provision identity security schema as administrator
         run: psql -v ON_ERROR_STOP=1 -d dawineks_hospitality_os -f database/security/identity-security-bootstrap.sql
 
-      - name: Install isolated RLS proof fixture
-        run: psql -v ON_ERROR_STOP=1 -d dawineks_hospitality_os -f database/security/g2-proof-fixtures.sql
-
       - name: Allow the dedicated migrator to create the migration repository
         run: psql -v ON_ERROR_STOP=1 -d dawineks_hospitality_os -c "GRANT CREATE ON SCHEMA public TO dawineks_migrator"
 
@@ -72,6 +69,9 @@ jobs:
 
       - name: Revoke temporary migration repository creation privilege
         run: psql -v ON_ERROR_STOP=1 -d dawineks_hospitality_os -c "REVOKE CREATE ON SCHEMA public FROM dawineks_migrator"
+
+      - name: Install isolated RLS proof fixture
+        run: psql -v ON_ERROR_STOP=1 -d dawineks_hospitality_os -f database/security/g2-proof-fixtures.sql
 
       - name: Seed the CI-only tenant context signing key
         run: >-
