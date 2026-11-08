@@ -33,7 +33,9 @@ BEGIN
     IF NOT has_function_privilege('dawineks_runtime', 'security.authenticate_client_user(text, text)', 'EXECUTE')
        OR NOT has_function_privilege('dawineks_runtime', 'security.load_client_user(uuid)', 'EXECUTE')
        OR NOT has_function_privilege('dawineks_runtime', 'security.save_client_mfa(uuid, text, jsonb)', 'EXECUTE')
-       OR NOT has_function_privilege('dawineks_runtime', 'security.consume_client_mfa_recovery_code(uuid, text)', 'EXECUTE') THEN
+       OR NOT has_function_privilege('dawineks_runtime', 'security.consume_client_mfa_recovery_code(uuid, text)', 'EXECUTE')
+       OR NOT has_function_privilege('dawineks_runtime', 'security.issue_client_password_reset(text)', 'EXECUTE')
+       OR NOT has_function_privilege('dawineks_runtime', 'security.complete_client_password_reset(text, text, text)', 'EXECUTE') THEN
         RAISE EXCEPTION 'Runtime authentication functions are not executable';
     END IF;
 
@@ -42,7 +44,13 @@ BEGIN
             WHERE procedure.oid = 'security.authenticate_client_user(text, text)'::regprocedure)
        OR NOT (SELECT procedure.prosecdef
                FROM pg_proc AS procedure
-               WHERE procedure.oid = 'security.load_client_user(uuid)'::regprocedure) THEN
+               WHERE procedure.oid = 'security.load_client_user(uuid)'::regprocedure)
+       OR NOT (SELECT procedure.prosecdef
+               FROM pg_proc AS procedure
+               WHERE procedure.oid = 'security.issue_client_password_reset(text)'::regprocedure)
+       OR NOT (SELECT procedure.prosecdef
+               FROM pg_proc AS procedure
+               WHERE procedure.oid = 'security.complete_client_password_reset(text, text, text)'::regprocedure) THEN
         RAISE EXCEPTION 'Authentication functions must use SECURITY DEFINER';
     END IF;
 
@@ -57,6 +65,28 @@ BEGIN
 
     IF has_table_privilege('dawineks_runtime', 'security.context_keys', 'SELECT') THEN
         RAISE EXCEPTION 'The runtime role must not read identity signing key material';
+    END IF;
+
+    IF has_table_privilege('dawineks_runtime', 'security.client_password_reset_tokens', 'SELECT')
+       OR has_table_privilege('dawineks_runtime', 'security.client_password_reset_tokens', 'INSERT')
+       OR has_table_privilege('dawineks_runtime', 'security.client_password_reset_tokens', 'UPDATE')
+       OR has_table_privilege('dawineks_runtime', 'security.client_password_reset_tokens', 'DELETE') THEN
+        RAISE EXCEPTION 'The runtime role must use security functions for password resets';
+    END IF;
+
+    IF NOT (SELECT table_class.relowner = 'dawineks_owner'::regrole
+                       AND table_class.relrowsecurity
+                       AND table_class.relforcerowsecurity
+            FROM pg_class AS table_class
+            JOIN pg_namespace AS table_schema ON table_schema.oid = table_class.relnamespace
+            WHERE table_schema.nspname = 'security'
+              AND table_class.relname = 'client_password_reset_tokens') THEN
+        RAISE EXCEPTION 'Password reset token storage must be owner-separated and protected by forced RLS';
+    END IF;
+
+    IF pg_get_function_result('security.authenticate_client_user(text, text)'::regprocedure) NOT LIKE '%auth_version integer%'
+       OR pg_get_function_result('security.load_client_user(uuid)'::regprocedure) NOT LIKE '%auth_version integer%' THEN
+        RAISE EXCEPTION 'Authentication functions must expose the session version for stale-session revocation';
     END IF;
 
     IF NOT has_table_privilege('dawineks_runtime', 'identity.account_memberships', 'SELECT')

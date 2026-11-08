@@ -81,6 +81,7 @@ final class SecurityClientUserProvider implements UserProvider
         $user->requiresMfa = $this->databaseBoolean($row->requires_mfa ?? false);
         $user->mfaEnabled = $this->databaseBoolean($row->mfa_enabled ?? false);
         $user->mfaSecretCiphertext = $row->mfa_secret_ciphertext ?? null;
+        $user->authVersion = (int) ($row->auth_version ?? 1);
 
         return $user;
     }

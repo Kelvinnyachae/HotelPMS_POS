@@ -2,6 +2,7 @@
 
 use App\Http\Middleware\ApplyTenantContext;
 use App\Http\Middleware\EnsureClientMfa;
+use App\Http\Middleware\EnsureClientSessionFresh;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
@@ -14,6 +15,7 @@ return Application::configure(basePath: dirname(__DIR__))
         health: '/up',
     )
     ->withMiddleware(function (Middleware $middleware): void {
+        $middleware->appendToGroup('web', EnsureClientSessionFresh::class);
         $middleware->alias([
             'tenant.context' => ApplyTenantContext::class,
             'client.mfa' => EnsureClientMfa::class,

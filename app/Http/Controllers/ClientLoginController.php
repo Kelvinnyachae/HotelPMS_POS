@@ -70,6 +70,7 @@ final class ClientLoginController extends Controller
 
         Auth::login($user);
         $request->session()->regenerate();
+        $request->session()->put('auth.auth_version', $user instanceof User ? $user->authVersion : 1);
 
         return redirect()->intended(route('home'));
     }

@@ -18,6 +18,8 @@
         input:focus { outline: 3px solid #8bc9bd; border-color: #0b7568; }
         button { width: 100%; margin-top: 1.4rem; padding: .85rem 1rem; border: 0; border-radius: 8px; color: white; background: #123b3a; font: inherit; font-weight: 700; cursor: pointer; }
         .error { margin-top: .4rem; color: #9a2929; font-size: .85rem; }
+        .status { margin: .8rem 0; padding: .7rem; color: #175f41; background: #e6f4ec; border-radius: 8px; }
+        a { color: #0b7568; font-weight: 700; }
         footer { margin-top: 1.4rem; color: #687984; font-size: .82rem; }
     </style>
 </head>
@@ -26,6 +28,7 @@
     <div class="brand">Dawineks Hospitality OS</div>
     <h1>Sign in</h1>
     <p>Use the account credentials provided by your organization.</p>
+    @if (session('status')) <div class="status">{{ session('status') }}</div> @endif
     <form method="POST" action="{{ route('login.store') }}">
         @csrf
         <label for="email">Email address</label>
@@ -38,7 +41,8 @@
 
         <button type="submit">Sign in</button>
     </form>
-    <footer>Administrator MFA is required. Password recovery is not yet available in this foundation preview.</footer>
+    <p><a href="{{ route('password.forgot') }}">Forgot your password?</a></p>
+    <footer>Administrator MFA is required.</footer>
 </main>
 </body>
 </html>

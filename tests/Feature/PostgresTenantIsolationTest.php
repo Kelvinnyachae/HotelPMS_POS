@@ -3,6 +3,7 @@
 namespace Tests\Feature;
 
 use App\Http\Middleware\ApplyTenantContext;
+use App\Mail\ClientPasswordResetMail;
 use App\Models\User;
 use App\Providers\ClientTotp;
 use App\Tenancy\TenantContext;
@@ -12,6 +13,8 @@ use Illuminate\Database\QueryException;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Route;
 use Illuminate\Support\Str;
 use PDO;
@@ -527,6 +530,64 @@ final class PostgresTenantIsolationTest extends TestCase
     {
         $this->assertTrue(ClientTotp::verify('GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ', '287082', 59));
         $this->assertFalse(ClientTotp::verify('GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ', '000000', 59));
+    }
+
+    public function test_password_reset_token_is_single_use_and_revokes_old_sessions(): void
+    {
+        Mail::fake();
+
+        $email = 'g2-reset@example.invalid';
+        $this->post('/login', [
+            'email' => $email,
+            'password' => 'G2 CI fixture password',
+        ])->assertRedirect(route('home'));
+        $oldUser = Auth::user();
+        $this->assertInstanceOf(User::class, $oldUser);
+        $this->assertSame(1, $oldUser->authVersion);
+        $this->assertSame(1, session('auth.auth_version'));
+
+        $this->post(route('password.email'), ['email' => $email])
+            ->assertSessionHas('status', 'If an active account matches that email, a password reset link will be sent.');
+        $sentMail = Mail::sent(ClientPasswordResetMail::class)->first();
+        $this->assertInstanceOf(ClientPasswordResetMail::class, $sentMail);
+
+        $urlParts = parse_url($sentMail->resetUrl);
+        parse_str($urlParts['query'] ?? '', $query);
+        $token = basename($urlParts['path'] ?? '');
+        $this->assertSame($email, $query['email'] ?? null);
+        $this->get(route('password.reset.form', ['token' => $token, 'email' => $email]))->assertOk();
+
+        $newPassword = 'New secure G2 password 2026';
+        $this->post(route('password.reset'), [
+            'email' => $email,
+            'token' => $token,
+            'password' => $newPassword,
+            'password_confirmation' => $newPassword,
+        ])->assertRedirect(route('login'));
+        $this->assertGuest();
+
+        Auth::login($oldUser);
+        session()->regenerate();
+        session()->put('auth.auth_version', $oldUser->authVersion);
+        Auth::forgetGuards();
+        $this->get('/workspace/select')->assertRedirect(route('login'));
+        $this->assertGuest();
+
+        $this->post('/login', [
+            'email' => $email,
+            'password' => 'G2 CI fixture password',
+        ])->assertSessionHasErrors('email');
+        $this->post('/login', [
+            'email' => $email,
+            'password' => $newPassword,
+        ])->assertRedirect(route('home'));
+        $this->assertAuthenticated();
+
+        $reused = DB::selectOne(
+            'SELECT security.complete_client_password_reset(?, ?, ?)::text AS completed',
+            [$email, $token, Hash::make('Another secure password 2026')],
+        )->completed;
+        $this->assertSame('false', $reused);
     }
 
     public function test_principal_cannot_select_another_principals_membership(): void

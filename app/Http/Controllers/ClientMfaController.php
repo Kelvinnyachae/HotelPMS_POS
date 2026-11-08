@@ -85,6 +85,7 @@ final class ClientMfaController extends Controller
         Auth::login($user);
         $request->session()->forget(['auth.pending_mfa_user_id', 'auth.pending_mfa_secret']);
         $request->session()->regenerate();
+        $request->session()->put('auth.auth_version', $user->authVersion);
 
         return redirect()->intended(route('home'));
     }
@@ -99,6 +100,7 @@ final class ClientMfaController extends Controller
             $request->session()->forget('auth.pending_mfa_enrollment_user_id');
             Auth::login($user);
             $request->session()->regenerate();
+            $request->session()->put('auth.auth_version', $user->authVersion);
 
             return redirect()->route('workspace.select');
         }
@@ -157,6 +159,7 @@ final class ClientMfaController extends Controller
         $user->mfaSecretCiphertext = $ciphertext;
         Auth::login($user);
         $request->session()->regenerate();
+        $request->session()->put('auth.auth_version', $user->authVersion);
 
         return view('mfa-recovery-codes', ['recoveryCodes' => $recoveryCodes]);
     }

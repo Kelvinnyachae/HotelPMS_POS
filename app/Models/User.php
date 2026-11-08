@@ -30,6 +30,8 @@ class User extends Authenticatable
 
     public ?string $mfaSecretCiphertext = null;
 
+    public int $authVersion = 1;
+
     /**
      * Get the attributes that should be cast.
      *
