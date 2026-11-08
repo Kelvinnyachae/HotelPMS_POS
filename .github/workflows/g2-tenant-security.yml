@@ -90,11 +90,13 @@ jobs:
       - name: Test tenant isolation under the runtime login
         run: |
           set +e
-          php artisan test --compact tests/Feature > "$RUNNER_TEMP/g2-feature-tests.log" 2>&1
+          php artisan test --compact --no-ansi tests/Feature > "$RUNNER_TEMP/g2-feature-tests.log" 2>&1
           test_status=$?
           cat "$RUNNER_TEMP/g2-feature-tests.log"
           if [ "$test_status" -ne 0 ]; then
             echo '## G2 feature test failure' >> "$GITHUB_STEP_SUMMARY"
             cat "$RUNNER_TEMP/g2-feature-tests.log" >> "$GITHUB_STEP_SUMMARY"
+            failure_summary=$(tail -n 20 "$RUNNER_TEMP/g2-feature-tests.log" | tr '\n' ' ')
+            echo "::error title=G2 feature test output::$failure_summary"
           fi
           exit "$test_status"
