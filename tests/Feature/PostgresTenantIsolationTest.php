@@ -455,7 +455,10 @@ final class PostgresTenantIsolationTest extends TestCase
         $this->get('/workspace?account_id=aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa&property_id=11111111-1111-4111-8111-111111111111')
             ->assertRedirect(route('login'));
 
-        $enrollment = $this->completeClientAdminMfaEnrollment();
+        $enrollment = $this->completeClientAdminMfaEnrollment(
+            'g2-admin@example.invalid',
+            'dddddddd-dddd-4ddd-8ddd-dddddddddddd',
+        );
 
         $this->get('/workspace/select')
             ->assertOk()
@@ -476,7 +479,7 @@ final class PostgresTenantIsolationTest extends TestCase
                 ],
             )->saved,
         );
-        $this->assertSame('f', $mfaReset);
+        $this->assertSame('false', $mfaReset);
 
         $this->assertNotEmpty($enrollment['recovery_code']);
         $this->assertContextCleared();
@@ -484,11 +487,15 @@ final class PostgresTenantIsolationTest extends TestCase
 
     public function test_client_admin_sign_in_requires_totp_and_recovery_codes_are_single_use(): void
     {
-        $enrollment = $this->completeClientAdminMfaEnrollment();
+        $email = 'g2-mfa-admin@example.invalid';
+        $enrollment = $this->completeClientAdminMfaEnrollment(
+            $email,
+            'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee',
+        );
 
         $this->post('/logout')->assertRedirect(route('login'));
         $this->post('/login', [
-            'email' => 'g2-admin@example.invalid',
+            'email' => $email,
             'password' => 'G2 CI fixture password',
         ])->assertRedirect(route('mfa.challenge'));
         $this->assertGuest();
@@ -499,7 +506,7 @@ final class PostgresTenantIsolationTest extends TestCase
 
         $this->post('/logout')->assertRedirect(route('login'));
         $this->post('/login', [
-            'email' => 'g2-admin@example.invalid',
+            'email' => $email,
             'password' => 'G2 CI fixture password',
         ])->assertRedirect(route('mfa.challenge'));
         $this->post(route('mfa.verify'), ['code' => $enrollment['recovery_code']])
@@ -508,7 +515,7 @@ final class PostgresTenantIsolationTest extends TestCase
 
         $this->post('/logout')->assertRedirect(route('login'));
         $this->post('/login', [
-            'email' => 'g2-admin@example.invalid',
+            'email' => $email,
             'password' => 'G2 CI fixture password',
         ])->assertRedirect(route('mfa.challenge'));
         $this->post(route('mfa.verify'), ['code' => $enrollment['recovery_code']])
@@ -735,10 +742,10 @@ final class PostgresTenantIsolationTest extends TestCase
     }
 
     /** @return array{secret: string, recovery_code: string} */
-    private function completeClientAdminMfaEnrollment(): array
+    private function completeClientAdminMfaEnrollment(string $email, string $userId): array
     {
         $this->post('/login', [
-            'email' => 'g2-admin@example.invalid',
+            'email' => $email,
             'password' => 'G2 CI fixture password',
         ])->assertRedirect(route('mfa.setup'));
 
@@ -751,6 +758,7 @@ final class PostgresTenantIsolationTest extends TestCase
         $recoveryResponse = $this->post(route('mfa.setup.confirm'), [
             'code' => ClientTotp::currentCode($secret),
         ])->assertOk()->assertSee('Save your recovery codes');
+        $this->assertSame($userId, (string) Auth::id());
         preg_match('/<code>([A-F0-9]{6}-[A-F0-9]{6})<\/code>/', $recoveryResponse->getContent(), $recoveryMatch);
         $this->assertNotEmpty($recoveryMatch[1] ?? null);
 
