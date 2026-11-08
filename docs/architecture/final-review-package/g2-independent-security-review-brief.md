@@ -18,7 +18,7 @@ Review the tenant/runtime security foundation and identity-membership authorizat
 - Core proof and setup: `database/security/g2-proof-fixtures.sql`, `database/security/g2-identity-ci-install.sql`, `.github/workflows/g2-tenant-security.yml`
 - Application path: `app/Tenancy/TenantContext.php`, `app/Tenancy/TenantMembershipResolver.php`, `app/Http/Middleware/ApplyTenantContext.php`, `app/Models/User.php`
 - Tests: `tests/Feature/PostgresTenantIsolationTest.php`, `tests/Feature/TenantContextConnectionFailureTest.php`
-- Latest hosted CI: [Run #18, PostgreSQL 15–18](https://github.com/Kelvinnyachae/HotelPMS_POS/actions/runs/42420999314)
+- Latest hosted CI: [Run #39, PostgreSQL 15–18](https://github.com/Kelvinnyachae/HotelPMS_POS/actions/runs/42484212752)
 
 ## Review questions
 
@@ -31,9 +31,9 @@ Review the tenant/runtime security foundation and identity-membership authorizat
 
 ## Known evidence limits
 
-- Run #18 verifies the configured PostgreSQL proof fixtures and the CI identity-table path; it does not establish production deployment or production key custody.
-- The CI installer deliberately reuses the isolated `g2_proof` principal verifier and CI-only key.
-- Authentication-provider and real user sign-in, MFA, device-enrollment, framework-wide tenant-scope coverage, external pool/long-lived worker behavior, and production grant review remain open.
+- Run #39 verifies the configured PostgreSQL proof fixtures, CI identity-table path, client sign-in, and client-administrator MFA flows; it does not establish production deployment or production key custody.
+- The CI installer uses disposable identity users and CI-only signing/encryption keys.
+- Password reset, POS device enrollment and shift-bound sessions, framework-wide tenant-scope coverage, external pool/long-lived worker behavior, production identity provisioning and grant review remain open.
 
 ## Handling
 
