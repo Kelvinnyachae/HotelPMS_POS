@@ -4,6 +4,7 @@ namespace Tests\Feature;
 
 use App\Http\Middleware\ApplyTenantContext;
 use App\Models\User;
+use App\Providers\ClientTotp;
 use App\Tenancy\TenantContext;
 use App\Tenancy\TenantMembershipResolver;
 use Closure;
@@ -442,6 +443,85 @@ final class PostgresTenantIsolationTest extends TestCase
         $this->assertGuest();
     }
 
+    public function test_client_administrator_must_enroll_mfa_before_workspace_access(): void
+    {
+        $this->post('/login', [
+            'email' => 'g2-admin@example.invalid',
+            'password' => 'G2 CI fixture password',
+        ])->assertRedirect(route('mfa.setup'));
+
+        $this->assertGuest();
+        $this->get('/workspace/select')->assertRedirect(route('login'));
+        $this->get('/workspace?account_id=aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa&property_id=11111111-1111-4111-8111-111111111111')
+            ->assertRedirect(route('login'));
+
+        $enrollment = $this->completeClientAdminMfaEnrollment();
+
+        $this->get('/workspace/select')
+            ->assertOk()
+            ->assertSee('Choose your workspace')
+            ->assertSee('11111111-1111-4111-8111-111111111111');
+        $this->get('/workspace?account_id=aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa&property_id=11111111-1111-4111-8111-111111111111')
+            ->assertOk()
+            ->assertSee('Client Workspace');
+
+        $mfaReset = app(TenantContext::class)->withinPrincipal(
+            'dddddddd-dddd-4ddd-8ddd-dddddddddddd',
+            fn () => DB::selectOne(
+                'SELECT security.save_client_mfa(?, ?, ?::jsonb)::text AS saved',
+                [
+                    'dddddddd-dddd-4ddd-8ddd-dddddddddddd',
+                    'attacker-controlled-ciphertext',
+                    json_encode([password_hash('unused', PASSWORD_BCRYPT)], JSON_THROW_ON_ERROR),
+                ],
+            )->saved,
+        );
+        $this->assertSame('f', $mfaReset);
+
+        $this->assertNotEmpty($enrollment['recovery_code']);
+        $this->assertContextCleared();
+    }
+
+    public function test_client_admin_sign_in_requires_totp_and_recovery_codes_are_single_use(): void
+    {
+        $enrollment = $this->completeClientAdminMfaEnrollment();
+
+        $this->post('/logout')->assertRedirect(route('login'));
+        $this->post('/login', [
+            'email' => 'g2-admin@example.invalid',
+            'password' => 'G2 CI fixture password',
+        ])->assertRedirect(route('mfa.challenge'));
+        $this->assertGuest();
+
+        $this->post(route('mfa.verify'), ['code' => ClientTotp::currentCode($enrollment['secret'])])
+            ->assertRedirect(route('home'));
+        $this->assertAuthenticated();
+
+        $this->post('/logout')->assertRedirect(route('login'));
+        $this->post('/login', [
+            'email' => 'g2-admin@example.invalid',
+            'password' => 'G2 CI fixture password',
+        ])->assertRedirect(route('mfa.challenge'));
+        $this->post(route('mfa.verify'), ['code' => $enrollment['recovery_code']])
+            ->assertRedirect(route('home'));
+        $this->assertAuthenticated();
+
+        $this->post('/logout')->assertRedirect(route('login'));
+        $this->post('/login', [
+            'email' => 'g2-admin@example.invalid',
+            'password' => 'G2 CI fixture password',
+        ])->assertRedirect(route('mfa.challenge'));
+        $this->post(route('mfa.verify'), ['code' => $enrollment['recovery_code']])
+            ->assertSessionHasErrors('code');
+        $this->assertGuest();
+    }
+
+    public function test_client_totp_matches_the_rfc_6238_sha1_test_vector(): void
+    {
+        $this->assertTrue(ClientTotp::verify('GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ', '287082', 59));
+        $this->assertFalse(ClientTotp::verify('GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ', '000000', 59));
+    }
+
     public function test_principal_cannot_select_another_principals_membership(): void
     {
         $request = Request::create('/', 'GET', [
@@ -652,6 +732,32 @@ final class PostgresTenantIsolationTest extends TestCase
         $this->assertTrue($context->context_signature === null || $context->context_signature === '');
         $this->assertTrue($context->principal_id === null || $context->principal_id === '');
         $this->assertTrue($context->principal_signature === null || $context->principal_signature === '');
+    }
+
+    /** @return array{secret: string, recovery_code: string} */
+    private function completeClientAdminMfaEnrollment(): array
+    {
+        $this->post('/login', [
+            'email' => 'g2-admin@example.invalid',
+            'password' => 'G2 CI fixture password',
+        ])->assertRedirect(route('mfa.setup'));
+
+        $this->assertGuest();
+        $setupResponse = $this->get(route('mfa.setup'))->assertOk();
+        preg_match('/data-secret="([A-Z2-7]+)"/', $setupResponse->getContent(), $secretMatch);
+        $this->assertNotEmpty($secretMatch[1] ?? null);
+        $secret = $secretMatch[1];
+
+        $recoveryResponse = $this->post(route('mfa.setup.confirm'), [
+            'code' => ClientTotp::currentCode($secret),
+        ])->assertOk()->assertSee('Save your recovery codes');
+        preg_match('/<code>([A-F0-9]{6}-[A-F0-9]{6})<\/code>/', $recoveryResponse->getContent(), $recoveryMatch);
+        $this->assertNotEmpty($recoveryMatch[1] ?? null);
+
+        return [
+            'secret' => $secret,
+            'recovery_code' => $recoveryMatch[1],
+        ];
     }
 
     private function user(string $id): User

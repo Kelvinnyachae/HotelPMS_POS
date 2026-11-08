@@ -12,6 +12,9 @@
         header { display: flex; align-items: center; justify-content: space-between; gap: 1rem; padding: 1rem clamp(1.25rem, 5vw, 4.5rem); color: #f7fbfa; background: #123b3a; }
         .brand { font-size: .95rem; font-weight: 700; letter-spacing: .02em; }
         .preview { border: 1px solid #c3d8d2; border-radius: 999px; padding: .4rem .7rem; color: #e1f2ec; font-size: .72rem; font-weight: 700; letter-spacing: .08em; }
+        .account-nav { display: flex; align-items: center; gap: .8rem; font-size: .82rem; }
+        .account-nav a { color: #e1f2ec; }
+        .account-nav button { border: 1px solid #c3d8d2; border-radius: 999px; padding: .4rem .7rem; color: #e1f2ec; background: transparent; font: inherit; cursor: pointer; }
         main { width: min(100% - 2rem, 920px); margin: 4rem auto; }
         .eyebrow { color: #0b7568; font-size: .75rem; font-weight: 800; letter-spacing: .12em; text-transform: uppercase; }
         h1 { margin: .75rem 0; font-size: clamp(2rem, 5vw, 3.35rem); line-height: 1.08; letter-spacing: -.04em; }
@@ -29,7 +32,17 @@
 <body>
 <header>
     <div class="brand">Dawineks Hospitality OS</div>
-    <div class="preview">LOCAL FOUNDATION PREVIEW · NOT FOR DEPLOYMENT</div>
+    <div class="account-nav">
+        <div class="preview">LOCAL FOUNDATION PREVIEW · NOT FOR DEPLOYMENT</div>
+        @auth
+            <span>{{ auth()->user()->name }}</span>
+            <a href="{{ route('workspace.select') }}">Switch workspace</a>
+            <form method="POST" action="{{ route('logout') }}">
+                @csrf
+                <button type="submit">Sign out</button>
+            </form>
+        @endauth
+    </div>
 </header>
 <main>
     <div class="eyebrow">@yield('eyebrow')</div>

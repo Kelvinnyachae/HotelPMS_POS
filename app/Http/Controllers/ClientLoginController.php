@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\User;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -37,7 +38,10 @@ final class ClientLoginController extends Controller
             ]);
         }
 
-        if (! Auth::attempt(['email' => $credentials['email'], 'password' => $credentials['password']])) {
+        $provider = Auth::guard()->getProvider();
+        $user = $provider->retrieveByCredentials($credentials);
+
+        if (! $user || ! $provider->validateCredentials($user, $credentials)) {
             RateLimiter::hit($key, 60);
 
             throw ValidationException::withMessages([
@@ -46,6 +50,25 @@ final class ClientLoginController extends Controller
         }
 
         RateLimiter::clear($key);
+
+        if ($user instanceof User && $user->mfaEnabled) {
+            $request->session()->regenerate();
+            $request->session()->put([
+                'auth.pending_mfa_user_id' => $user->getAuthIdentifier(),
+                'auth.pending_mfa_secret' => $user->mfaSecretCiphertext,
+            ]);
+
+            return redirect()->route('mfa.challenge');
+        }
+
+        if ($user instanceof User && $user->requiresMfa) {
+            $request->session()->regenerate();
+            $request->session()->put('auth.pending_mfa_enrollment_user_id', $user->getAuthIdentifier());
+
+            return redirect()->route('mfa.setup');
+        }
+
+        Auth::login($user);
         $request->session()->regenerate();
 
         return redirect()->intended(route('home'));

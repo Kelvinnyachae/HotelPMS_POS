@@ -31,7 +31,9 @@ BEGIN
     END IF;
 
     IF NOT has_function_privilege('dawineks_runtime', 'security.authenticate_client_user(text, text)', 'EXECUTE')
-       OR NOT has_function_privilege('dawineks_runtime', 'security.load_client_user(uuid)', 'EXECUTE') THEN
+       OR NOT has_function_privilege('dawineks_runtime', 'security.load_client_user(uuid)', 'EXECUTE')
+       OR NOT has_function_privilege('dawineks_runtime', 'security.save_client_mfa(uuid, text, jsonb)', 'EXECUTE')
+       OR NOT has_function_privilege('dawineks_runtime', 'security.consume_client_mfa_recovery_code(uuid, text)', 'EXECUTE') THEN
         RAISE EXCEPTION 'Runtime authentication functions are not executable';
     END IF;
 
@@ -46,6 +48,11 @@ BEGIN
 
     IF position('password' IN pg_get_function_result('security.authenticate_client_user(text, text)'::regprocedure)) > 0 THEN
         RAISE EXCEPTION 'The authentication function must not return password material';
+    END IF;
+
+    IF position('mfa_secret_ciphertext' IN pg_get_function_result('security.authenticate_client_user(text, text)'::regprocedure)) = 0
+       OR position('mfa_recovery_code_hashes' IN pg_get_function_result('security.authenticate_client_user(text, text)'::regprocedure)) > 0 THEN
+        RAISE EXCEPTION 'The sign-in function may return the encrypted MFA secret but not recovery hashes';
     END IF;
 
     IF has_table_privilege('dawineks_runtime', 'security.context_keys', 'SELECT') THEN

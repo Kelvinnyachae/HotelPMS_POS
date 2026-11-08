@@ -38,7 +38,7 @@
 
         <button type="submit">Sign in</button>
     </form>
-    <footer>Account recovery and multi-factor setup are not yet available in this foundation preview.</footer>
+    <footer>Administrator MFA is required. Password recovery is not yet available in this foundation preview.</footer>
 </main>
 </body>
 </html>

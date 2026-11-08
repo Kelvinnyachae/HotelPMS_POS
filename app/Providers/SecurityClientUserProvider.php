@@ -78,7 +78,15 @@ final class SecurityClientUserProvider implements UserProvider
             'email' => $row->email,
         ], sync: true);
         $user->exists = true;
+        $user->requiresMfa = $this->databaseBoolean($row->requires_mfa ?? false);
+        $user->mfaEnabled = $this->databaseBoolean($row->mfa_enabled ?? false);
+        $user->mfaSecretCiphertext = $row->mfa_secret_ciphertext ?? null;
 
         return $user;
+    }
+
+    private function databaseBoolean(mixed $value): bool
+    {
+        return $value === true || $value === 't' || $value === 'true' || $value === '1' || $value === 1;
     }
 }

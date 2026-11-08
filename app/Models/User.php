@@ -23,6 +23,13 @@ class User extends Authenticatable
     /** Set only by SecurityClientUserProvider after database-side verification. */
     public bool $credentialsVerified = false;
 
+    /** Identity policy and MFA state, returned by security-definer functions. */
+    public bool $requiresMfa = false;
+
+    public bool $mfaEnabled = false;
+
+    public ?string $mfaSecretCiphertext = null;
+
     /**
      * Get the attributes that should be cast.
      *
