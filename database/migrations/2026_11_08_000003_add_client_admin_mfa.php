@@ -141,7 +141,7 @@ return new class extends Migration
                 GET DIAGNOSTICS changed_rows = ROW_COUNT;
 
                 RETURN changed_rows = 1;
-            END
+            END;
             $function$
             SQL);
 
@@ -196,7 +196,7 @@ return new class extends Migration
                 GET DIAGNOSTICS changed_rows = ROW_COUNT;
 
                 RETURN changed_rows = 1;
-            END
+            END;
             $function$
             SQL);
 
