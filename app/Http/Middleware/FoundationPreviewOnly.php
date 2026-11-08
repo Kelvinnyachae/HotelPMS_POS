@@ -13,7 +13,7 @@ final class FoundationPreviewOnly
      */
     public function handle(Request $request, Closure $next): Response
     {
-        abort_unless(app()->environment('local'), 404);
+        abort_unless(app()->environment(['local', 'testing']), 404);
 
         return $next($request);
     }

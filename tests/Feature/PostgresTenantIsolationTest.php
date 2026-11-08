@@ -396,6 +396,22 @@ final class PostgresTenantIsolationTest extends TestCase
         $this->assertContextCleared();
     }
 
+    public function test_workspace_route_requires_auth_and_runs_in_resolved_tenant_context(): void
+    {
+        $accountId = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
+        $propertyId = '11111111-1111-4111-8111-111111111111';
+
+        $this->getJson('/workspace?account_id='.$accountId.'&property_id='.$propertyId)
+            ->assertUnauthorized();
+
+        $this->actingAs($this->user($accountId))
+            ->get('/workspace?account_id='.$accountId.'&property_id='.$propertyId)
+            ->assertOk()
+            ->assertSee('Client Workspace');
+
+        $this->assertContextCleared();
+    }
+
     public function test_principal_cannot_select_another_principals_membership(): void
     {
         $request = Request::create('/', 'GET', [

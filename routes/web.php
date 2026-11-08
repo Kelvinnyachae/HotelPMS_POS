@@ -9,5 +9,7 @@ Route::get('/', function () {
 
 Route::middleware(FoundationPreviewOnly::class)->group(function (): void {
     Route::view('/control', 'surfaces.control')->name('platform.preview');
-    Route::view('/workspace', 'surfaces.workspace')->name('workspace.preview');
+    Route::get('/workspace', fn () => view('surfaces.workspace'))
+        ->middleware(['auth', 'tenant.context'])
+        ->name('workspace.preview');
 });
