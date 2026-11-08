@@ -113,12 +113,15 @@ return new class extends Migration
                 IF NOT security.valid_principal_context()
                    OR security.current_principal_id() <> target_user
                    OR encrypted_secret IS NULL
-                   OR length(encrypted_secret) > 2048
-                   OR CASE
-                        WHEN jsonb_typeof(recovery_hashes) = 'array'
-                        THEN jsonb_array_length(recovery_hashes) NOT BETWEEN 1 AND 20
-                        ELSE true
-                      END THEN
+                   OR length(encrypted_secret) > 2048 THEN
+                    RETURN false;
+                END IF;
+
+                IF jsonb_typeof(recovery_hashes) IS DISTINCT FROM 'array' THEN
+                    RETURN false;
+                END IF;
+
+                IF jsonb_array_length(recovery_hashes) NOT BETWEEN 1 AND 20 THEN
                     RETURN false;
                 END IF;
 
