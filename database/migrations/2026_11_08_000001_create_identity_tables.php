@@ -14,6 +14,8 @@ return new class extends Migration
      */
     public function up(): void
     {
+        DB::statement('SET LOCAL ROLE dawineks_owner');
+
         Schema::create('identity.users', function (Blueprint $table): void {
             $table->uuid('id')->primary();
             $table->string('name', 200);
@@ -41,11 +43,35 @@ return new class extends Migration
             ADD CONSTRAINT identity_membership_status_check
             CHECK (status IN ('active', 'suspended', 'revoked'))
             SQL);
+
+        DB::statement('CREATE UNIQUE INDEX identity_users_email_lower_unique ON identity.users (lower(email))');
+
+        DB::statement('ALTER TABLE identity.users ENABLE ROW LEVEL SECURITY');
+        DB::statement('ALTER TABLE identity.users FORCE ROW LEVEL SECURITY');
+        DB::statement(<<<'SQL'
+            CREATE POLICY identity_users_owner_scope ON identity.users
+            FOR ALL TO dawineks_owner USING (true) WITH CHECK (true)
+            SQL);
+
+        DB::statement('ALTER TABLE identity.account_memberships ENABLE ROW LEVEL SECURITY');
+        DB::statement('ALTER TABLE identity.account_memberships FORCE ROW LEVEL SECURITY');
+        DB::statement(<<<'SQL'
+            CREATE POLICY identity_membership_principal_scope ON identity.account_memberships
+            FOR SELECT TO dawineks_runtime USING (user_id = security.current_principal_id())
+            SQL);
+        DB::statement(<<<'SQL'
+            CREATE POLICY identity_membership_owner_scope ON identity.account_memberships
+            FOR ALL TO dawineks_owner USING (true) WITH CHECK (true)
+            SQL);
+
+        DB::statement('REVOKE ALL ON ALL TABLES IN SCHEMA identity FROM PUBLIC, dawineks_runtime');
+        DB::statement('GRANT USAGE ON SCHEMA identity TO dawineks_runtime');
+        DB::statement('GRANT SELECT ON TABLE identity.account_memberships TO dawineks_runtime');
+        DB::statement('GRANT SELECT ON TABLE identity.account_memberships TO dawineks_owner');
     }
 
     public function down(): void
     {
-        Schema::dropIfExists('identity.account_memberships');
-        Schema::dropIfExists('identity.users');
+        throw new LogicException('Identity tables cannot be removed by an automatic migration rollback.');
     }
 };

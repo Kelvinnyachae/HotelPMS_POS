@@ -55,17 +55,29 @@ jobs:
       - name: Create least-privilege roles and database
         run: psql -v ON_ERROR_STOP=1 -d postgres -f database/security/g2-ci-bootstrap.sql
 
+      - name: Provision identity security schema as administrator
+        run: psql -v ON_ERROR_STOP=1 -d dawineks_hospitality_os -f database/security/identity-security-bootstrap.sql
+
       - name: Install isolated RLS proof fixture
         run: psql -v ON_ERROR_STOP=1 -d dawineks_hospitality_os -f database/security/g2-proof-fixtures.sql
 
-      - name: Run identity migrations with administrator credentials
-        run: DB_CONNECTION=pgsql DB_USERNAME=postgres DB_PASSWORD=postgres php artisan migrate --force
+      - name: Allow the dedicated migrator to create the migration repository
+        run: psql -v ON_ERROR_STOP=1 -d dawineks_hospitality_os -c "GRANT CREATE ON SCHEMA public TO dawineks_migrator"
+
+      - name: Run identity migrations with the separate migration login
+        run: DB_CONNECTION=pgsql DB_USERNAME=dawineks_migrator DB_PASSWORD=g2-ci-migrator-only php artisan migrate --force
+
+      - name: Verify identity security immediately after migrations
+        run: psql -v ON_ERROR_STOP=1 -d dawineks_hospitality_os -f database/security/assert-identity-rls.sql
+
+      - name: Revoke temporary migration repository creation privilege
+        run: psql -v ON_ERROR_STOP=1 -d dawineks_hospitality_os -c "REVOKE CREATE ON SCHEMA public FROM dawineks_migrator"
 
       - name: Seed the CI-only tenant context signing key
         run: >-
           psql -v ON_ERROR_STOP=1 -d dawineks_hospitality_os
-          -c "INSERT INTO g2_proof.context_keys (key_id, key_material)
-          VALUES ('active', decode('${TENANT_CONTEXT_KEY}', 'hex'))"
+          -c "INSERT INTO security.context_keys (key_id, key_material, is_active)
+          VALUES ('ci-active', decode('${TENANT_CONTEXT_KEY}', 'hex'), true)"
 
       - name: Install CI-only identity grants and membership fixtures
         run: psql -v ON_ERROR_STOP=1 -d dawineks_hospitality_os -f database/security/g2-identity-ci-install.sql

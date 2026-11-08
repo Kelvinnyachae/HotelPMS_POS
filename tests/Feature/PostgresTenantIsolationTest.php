@@ -121,7 +121,7 @@ final class PostgresTenantIsolationTest extends TestCase
             $this->assertSame(0, DB::table('g2_proof.tenant_records')->count());
 
             try {
-                DB::table('g2_proof.context_keys')->count();
+                DB::table('security.context_keys')->count();
                 $this->fail('The runtime login must not read the signing key.');
             } catch (QueryException) {
                 $this->assertTrue(true);
