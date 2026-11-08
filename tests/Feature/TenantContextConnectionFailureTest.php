@@ -32,9 +32,8 @@ final class TenantContextConnectionFailureTest extends TestCase
         $this->expectException(RuntimeException::class);
         $this->expectExceptionMessage('Simulated request failure.');
 
-        app(TenantContext::class)->within(
+        app(TenantContext::class)->withinPrincipal(
             'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
-            '11111111-1111-4111-8111-111111111111',
             fn (): null => null,
         );
     }
@@ -57,9 +56,8 @@ final class TenantContextConnectionFailureTest extends TestCase
         $this->expectException(RuntimeException::class);
         $this->expectExceptionMessage('server closed the connection unexpectedly');
 
-        app(TenantContext::class)->within(
+        app(TenantContext::class)->withinPrincipal(
             'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
-            '11111111-1111-4111-8111-111111111111',
             fn (): null => null,
         );
     }

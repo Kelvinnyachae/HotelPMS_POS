@@ -8,6 +8,7 @@ use Illuminate\Support\Facades\DB;
 use InvalidArgumentException;
 use LogicException;
 use RuntimeException;
+use Symfony\Component\HttpFoundation\Response;
 use Throwable;
 
 final class TenantContext
@@ -16,26 +17,6 @@ final class TenantContext
      * Run tenant-scoped work inside a transaction so PostgreSQL's SET LOCAL
      * context is cleared automatically on both commit and rollback.
      */
-    public function within(string $accountId, string $propertyId, Closure $callback): mixed
-    {
-        if (! self::isValidUuid($accountId) || ! self::isValidUuid($propertyId)) {
-            throw new InvalidArgumentException('Tenant context requires valid account and property UUIDs.');
-        }
-
-        $accountId = strtolower($accountId);
-        $propertyId = strtolower($propertyId);
-
-        return $this->withinTransaction(function ($connection) use ($accountId, $propertyId, $callback): mixed {
-            $connection->select("select set_config('app.account_id', ?, true)", [$accountId]);
-            $connection->select("select set_config('app.property_id', ?, true)", [$propertyId]);
-            $connection->select("select set_config('app.context_signature', ?, true)", [
-                hash_hmac('sha256', $accountId.':'.$propertyId, $this->signingKey()),
-            ]);
-
-            return $callback();
-        });
-    }
-
     /**
      * Resolve identity memberships inside a signed, transaction-local principal context.
      * The database RLS policy exposes only this principal's membership rows.
@@ -49,9 +30,10 @@ final class TenantContext
         $principalId = strtolower($principalId);
 
         return $this->withinTransaction(function ($connection) use ($principalId, $callback): mixed {
+            $transactionId = (string) $connection->selectOne('SELECT txid_current() AS transaction_id')->transaction_id;
             $connection->select("select set_config('app.principal_id', ?, true)", [$principalId]);
             $connection->select("select set_config('app.principal_signature', ?, true)", [
-                hash_hmac('sha256', 'principal:'.$principalId, $this->signingKey()),
+                hash_hmac('sha256', 'principal:'.$principalId.':'.$transactionId, $this->signingKey()),
             ]);
 
             return $callback();
@@ -78,9 +60,10 @@ final class TenantContext
         $propertyId = strtolower($propertyId);
 
         return $this->withinTransaction(function ($connection) use ($principalId, $accountId, $propertyId, $authorize, $callback): mixed {
+            $transactionId = (string) $connection->selectOne('SELECT txid_current() AS transaction_id')->transaction_id;
             $connection->select("select set_config('app.principal_id', ?, true)", [$principalId]);
             $connection->select("select set_config('app.principal_signature', ?, true)", [
-                hash_hmac('sha256', 'principal:'.$principalId, $this->signingKey()),
+                hash_hmac('sha256', 'principal:'.$principalId.':'.$transactionId, $this->signingKey()),
             ]);
 
             if (! $authorize($connection)) {
@@ -90,7 +73,7 @@ final class TenantContext
             $connection->select("select set_config('app.account_id', ?, true)", [$accountId]);
             $connection->select("select set_config('app.property_id', ?, true)", [$propertyId]);
             $connection->select("select set_config('app.context_signature', ?, true)", [
-                hash_hmac('sha256', $accountId.':'.$propertyId, $this->signingKey()),
+                hash_hmac('sha256', $principalId.':'.$accountId.':'.$propertyId.':'.$transactionId, $this->signingKey()),
             ]);
 
             return $callback();
@@ -109,7 +92,17 @@ final class TenantContext
         $this->signingKey();
 
         try {
-            return $connection->transaction(fn () => $callback($connection));
+            return $connection->transaction(function () use ($connection, $callback): mixed {
+                $result = $callback($connection);
+
+                if ($result instanceof Response && ($result->getStatusCode() >= 400 || (property_exists($result, 'exception') && $result->exception !== null))) {
+                    throw new TenantContextResponseRollback($result);
+                }
+
+                return $result;
+            });
+        } catch (TenantContextResponseRollback $rollback) {
+            return $rollback->response;
         } catch (Throwable $exception) {
             $purgeConnection = (new LostConnectionDetector)->causedByLostConnection($exception);
 

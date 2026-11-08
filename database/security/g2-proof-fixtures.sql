@@ -36,7 +36,8 @@ CREATE TABLE IF NOT EXISTS g2_proof.account_memberships (
 INSERT INTO g2_proof.account_memberships (user_id, account_id, property_id, status)
 VALUES
     ('aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', '11111111-1111-4111-8111-111111111111', 'active'),
-    ('bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb', 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb', '22222222-2222-4222-8222-222222222222', 'active')
+    ('bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb', 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb', '22222222-2222-4222-8222-222222222222', 'suspended'),
+    ('cccccccc-cccc-4ccc-8ccc-cccccccccccc', 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb', '22222222-2222-4222-8222-222222222222', 'active')
 ON CONFLICT (user_id, account_id, property_id) DO UPDATE
 SET status = EXCLUDED.status;
 
@@ -52,7 +53,7 @@ AS $$
         AND context.signature ~ '^[0-9a-fA-F]{64}$'
         AND encode(
             public.hmac(
-                convert_to('principal:' || lower(context.principal_id), 'UTF8'),
+                convert_to('principal:' || lower(context.principal_id) || ':' || txid_current()::text, 'UTF8'),
                 (SELECT key_material FROM g2_proof.context_keys WHERE key_id = 'active'),
                 'sha256'
             ),

@@ -6,9 +6,11 @@ use App\Http\Middleware\ApplyTenantContext;
 use App\Models\User;
 use App\Tenancy\TenantContext;
 use App\Tenancy\TenantMembershipResolver;
+use Closure;
 use Illuminate\Database\QueryException;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Route;
 use Illuminate\Support\Str;
 use PDO;
 use Symfony\Component\HttpFoundation\Response;
@@ -136,11 +138,9 @@ final class PostgresTenantIsolationTest extends TestCase
         $accountB = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
         $propertyB = '22222222-2222-4222-8222-222222222222';
         $recordA = Str::uuid()->toString();
-        $recordAOtherProperty = Str::uuid()->toString();
         $recordB = Str::uuid()->toString();
-        $context = app(TenantContext::class);
 
-        $context->within($accountA, $propertyA, function () use ($accountA, $propertyA, $recordA): void {
+        $this->withinAuthorizedMembership('aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', $accountA, $propertyA, function () use ($accountA, $propertyA, $recordA): void {
             DB::table('g2_proof.tenant_records')->insert([
                 'record_id' => $recordA,
                 'account_id' => $accountA,
@@ -149,7 +149,7 @@ final class PostgresTenantIsolationTest extends TestCase
             ]);
         });
 
-        $context->within($accountB, $propertyB, function () use ($accountB, $propertyB, $recordB): void {
+        $this->withinAuthorizedMembership('cccccccc-cccc-4ccc-8ccc-cccccccccccc', $accountB, $propertyB, function () use ($accountB, $propertyB, $recordB): void {
             DB::table('g2_proof.tenant_records')->insert([
                 'record_id' => $recordB,
                 'account_id' => $accountB,
@@ -158,48 +158,38 @@ final class PostgresTenantIsolationTest extends TestCase
             ]);
         });
 
-        $context->within($accountA, $propertyB, function () use ($accountA, $propertyB, $recordAOtherProperty): void {
-            DB::table('g2_proof.tenant_records')->insert([
-                'record_id' => $recordAOtherProperty,
-                'account_id' => $accountA,
-                'property_id' => $propertyB,
-                'payload' => 'account A property B',
-            ]);
-        });
-
-        $visibleA = $context->within($accountA, $propertyA, fn (): array => DB::table('g2_proof.tenant_records')
-            ->whereIn('record_id', [$recordA, $recordAOtherProperty, $recordB])
+        $visibleA = $this->withinAuthorizedMembership('aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', $accountA, $propertyA, fn (): array => DB::table('g2_proof.tenant_records')
+            ->whereIn('record_id', [$recordA, $recordB])
             ->pluck('payload')
             ->all());
-        $visibleThroughView = $context->within($accountA, $propertyA, fn (): array => DB::table('g2_proof.tenant_records_view')
-            ->whereIn('record_id', [$recordA, $recordAOtherProperty, $recordB])
+        $visibleThroughView = $this->withinAuthorizedMembership('aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', $accountA, $propertyA, fn (): array => DB::table('g2_proof.tenant_records_view')
+            ->whereIn('record_id', [$recordA, $recordB])
             ->pluck('payload')
             ->all());
-        $visibleOtherProperty = $context->within($accountA, $propertyB, fn (): array => DB::table('g2_proof.tenant_records')
-            ->whereIn('record_id', [$recordA, $recordAOtherProperty, $recordB])
+        $visibleOtherProperty = $this->withinAuthorizedMembership('cccccccc-cccc-4ccc-8ccc-cccccccccccc', $accountB, $propertyB, fn (): array => DB::table('g2_proof.tenant_records')
+            ->whereIn('record_id', [$recordA, $recordB])
             ->pluck('payload')
             ->all());
 
         $this->assertSame(['account A property A'], $visibleA);
         $this->assertSame(['account A property A'], $visibleThroughView);
-        $this->assertSame(['account A property B'], $visibleOtherProperty);
+        $this->assertSame(['account B property B'], $visibleOtherProperty);
     }
 
     public function test_transaction_local_context_is_cleared_after_success_and_failure(): void
     {
-        $context = app(TenantContext::class);
         $accountId = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
         $propertyId = '11111111-1111-4111-8111-111111111111';
         $backendPid = DB::selectOne('SELECT pg_backend_pid() AS backend_pid')->backend_pid;
 
-        $context->within($accountId, $propertyId, fn (): string => 'completed');
+        $this->withinAuthorizedMembership('aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', $accountId, $propertyId, fn (): string => 'completed');
         $this->assertContextCleared();
         $this->assertSame($backendPid, DB::selectOne('SELECT pg_backend_pid() AS backend_pid')->backend_pid);
 
         $rolledBackRecordId = Str::uuid()->toString();
 
         try {
-            $context->within($accountId, $propertyId, function () use ($accountId, $propertyId, $rolledBackRecordId): never {
+            $this->withinAuthorizedMembership('aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', $accountId, $propertyId, function () use ($accountId, $propertyId, $rolledBackRecordId): never {
                 DB::table('g2_proof.tenant_records')->insert([
                     'record_id' => $rolledBackRecordId,
                     'account_id' => $accountId,
@@ -215,10 +205,46 @@ final class PostgresTenantIsolationTest extends TestCase
 
         $this->assertContextCleared();
         $this->assertSame($backendPid, DB::selectOne('SELECT pg_backend_pid() AS backend_pid')->backend_pid);
-        $visibleAfterFailure = $context->within($accountId, $propertyId, fn (): int => DB::table('g2_proof.tenant_records')
+        $visibleAfterFailure = $this->withinAuthorizedMembership('aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', $accountId, $propertyId, fn (): int => DB::table('g2_proof.tenant_records')
             ->where('record_id', $rolledBackRecordId)
             ->count());
         $this->assertSame(0, $visibleAfterFailure);
+    }
+
+    public function test_session_level_context_cannot_authorize_a_later_transaction(): void
+    {
+        $accountId = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
+        $propertyId = '11111111-1111-4111-8111-111111111111';
+        $contextKey = hex2bin((string) config('tenancy.context_key_hex'));
+
+        if ($contextKey === false) {
+            $this->fail('The G2 signing key must be valid for this test.');
+        }
+
+        DB::beginTransaction();
+        try {
+            $transactionId = (string) DB::selectOne('SELECT txid_current() AS transaction_id')->transaction_id;
+            $signature = hash_hmac('sha256', 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa:'.$accountId.':'.$propertyId.':'.$transactionId, $contextKey);
+            DB::select("SELECT set_config('app.principal_id', ?, false)", ['aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa']);
+            DB::select("SELECT set_config('app.principal_signature', ?, false)", [hash_hmac('sha256', 'principal:aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa:'.$transactionId, $contextKey)]);
+            DB::select("SELECT set_config('app.account_id', ?, false)", [$accountId]);
+            DB::select("SELECT set_config('app.property_id', ?, false)", [$propertyId]);
+            DB::select("SELECT set_config('app.context_signature', ?, false)", [$signature]);
+            DB::commit();
+        } catch (Throwable $exception) {
+            DB::rollBack();
+            throw $exception;
+        }
+
+        try {
+            $this->assertSame(0, DB::table('g2_proof.tenant_records')->count());
+        } finally {
+            DB::statement('RESET app.principal_id');
+            DB::statement('RESET app.principal_signature');
+            DB::statement('RESET app.account_id');
+            DB::statement('RESET app.property_id');
+            DB::statement('RESET app.context_signature');
+        }
     }
 
     public function test_connection_is_purged_when_postgres_terminates_it_during_tenant_work(): void
@@ -240,7 +266,8 @@ final class PostgresTenantIsolationTest extends TestCase
         );
 
         try {
-            app(TenantContext::class)->within(
+            $this->withinAuthorizedMembership(
+                'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
                 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
                 '11111111-1111-4111-8111-111111111111',
                 function () use ($adminConnection, $backendPid): string {
@@ -340,6 +367,35 @@ final class PostgresTenantIsolationTest extends TestCase
         $this->assertContextCleared();
     }
 
+    public function test_real_http_error_response_rolls_back_tenant_writes(): void
+    {
+        $recordId = Str::uuid()->toString();
+        $accountId = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
+        $propertyId = '11111111-1111-4111-8111-111111111111';
+
+        Route::post('/__g2/error-after-write', function () use ($recordId, $accountId, $propertyId): never {
+            DB::table('g2_proof.tenant_records')->insert([
+                'record_id' => $recordId,
+                'account_id' => $accountId,
+                'property_id' => $propertyId,
+                'payload' => 'must roll back when Laravel renders the exception',
+            ]);
+
+            abort(500, 'simulated HTTP action failure');
+        })->middleware('tenant.context');
+
+        $response = $this->actingAs($this->user($accountId))
+            ->post('/__g2/error-after-write', ['account_id' => $accountId, 'property_id' => $propertyId]);
+
+        $response->assertInternalServerError();
+        $remainingRows = $this->withinAuthorizedMembership($accountId, $accountId, $propertyId, fn (): int => DB::table('g2_proof.tenant_records')
+            ->where('record_id', $recordId)
+            ->count());
+
+        $this->assertSame(0, $remainingRows);
+        $this->assertContextCleared();
+    }
+
     public function test_principal_cannot_select_another_principals_membership(): void
     {
         $request = Request::create('/', 'GET', [
@@ -379,6 +435,83 @@ final class PostgresTenantIsolationTest extends TestCase
         $this->assertSame($principalId, $membership['context']->principal_id);
         $this->assertSame(1, $membership['own_count']);
         $this->assertSame(0, $membership['other_count']);
+        $this->assertContextCleared();
+    }
+
+    public function test_database_policy_rejects_replayed_context_without_principal_or_active_membership(): void
+    {
+        $accountId = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
+        $propertyId = '22222222-2222-4222-8222-222222222222';
+        $principalId = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
+        $key = hex2bin((string) config('tenancy.context_key_hex'));
+
+        if ($key === false) {
+            $this->fail('The G2 signing key must be valid for this test.');
+        }
+
+        try {
+            DB::transaction(function () use ($accountId, $propertyId, $principalId, $key): void {
+                $transactionId = (string) DB::selectOne('SELECT txid_current() AS transaction_id')->transaction_id;
+                DB::select("SELECT set_config('app.account_id', ?, true)", [$accountId]);
+                DB::select("SELECT set_config('app.property_id', ?, true)", [$propertyId]);
+                DB::select("SELECT set_config('app.context_signature', ?, true)", [
+                    hash_hmac('sha256', $principalId.':'.$accountId.':'.$propertyId.':'.$transactionId, $key),
+                ]);
+
+                DB::table('g2_proof.tenant_records')->insert([
+                    'record_id' => Str::uuid()->toString(),
+                    'account_id' => $accountId,
+                    'property_id' => $propertyId,
+                    'payload' => 'replayed tenant context without a principal',
+                ]);
+            });
+            $this->fail('A tenant signature without its principal must not authorize a write.');
+        } catch (QueryException $exception) {
+            $this->assertSame('42501', $exception->getCode());
+        }
+
+        try {
+            app(TenantContext::class)->withinPrincipal('aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', function () use ($key): void {
+                $transactionId = (string) DB::selectOne('SELECT txid_current() AS transaction_id')->transaction_id;
+                $accountId = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
+                $propertyId = '22222222-2222-4222-8222-222222222222';
+                DB::select("SELECT set_config('app.account_id', ?, true)", [$accountId]);
+                DB::select("SELECT set_config('app.property_id', ?, true)", [$propertyId]);
+                DB::select("SELECT set_config('app.context_signature', ?, true)", [
+                    hash_hmac('sha256', 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa:'.$accountId.':'.$propertyId.':'.$transactionId, $key),
+                ]);
+                DB::table('g2_proof.tenant_records')->insert([
+                    'record_id' => Str::uuid()->toString(),
+                    'account_id' => $accountId,
+                    'property_id' => $propertyId,
+                    'payload' => 'account A paired with property B without an active membership',
+                ]);
+            });
+            $this->fail('A valid principal cannot pair an account with an unassigned property.');
+        } catch (QueryException $exception) {
+            $this->assertSame('42501', $exception->getCode());
+        }
+
+        try {
+            app(TenantContext::class)->withinPrincipal($principalId, function () use ($accountId, $propertyId, $principalId, $key): void {
+                $transactionId = (string) DB::selectOne('SELECT txid_current() AS transaction_id')->transaction_id;
+                DB::select("SELECT set_config('app.account_id', ?, true)", [$accountId]);
+                DB::select("SELECT set_config('app.property_id', ?, true)", [$propertyId]);
+                DB::select("SELECT set_config('app.context_signature', ?, true)", [
+                    hash_hmac('sha256', $principalId.':'.$accountId.':'.$propertyId.':'.$transactionId, $key),
+                ]);
+
+                DB::table('g2_proof.tenant_records')->insert([
+                    'record_id' => Str::uuid()->toString(),
+                    'account_id' => $accountId,
+                    'property_id' => $propertyId,
+                    'payload' => 'suspended principal tenant context',
+                ]);
+            });
+            $this->fail('A suspended principal membership must not authorize a tenant write.');
+        } catch (QueryException $exception) {
+            $this->assertSame('42501', $exception->getCode());
+        }
         $this->assertContextCleared();
     }
 
@@ -464,11 +597,13 @@ final class PostgresTenantIsolationTest extends TestCase
     {
         $context = DB::selectOne("SELECT current_setting('app.account_id', true) AS account_id,
                                          current_setting('app.property_id', true) AS property_id,
+                                         current_setting('app.context_signature', true) AS context_signature,
                                          current_setting('app.principal_id', true) AS principal_id,
                                          current_setting('app.principal_signature', true) AS principal_signature");
 
         $this->assertTrue($context->account_id === null || $context->account_id === '');
         $this->assertTrue($context->property_id === null || $context->property_id === '');
+        $this->assertTrue($context->context_signature === null || $context->context_signature === '');
         $this->assertTrue($context->principal_id === null || $context->principal_id === '');
         $this->assertTrue($context->principal_signature === null || $context->principal_signature === '');
     }
@@ -479,5 +614,15 @@ final class PostgresTenantIsolationTest extends TestCase
         $user->setAttribute('id', $id);
 
         return $user;
+    }
+
+    private function withinAuthorizedMembership(string $principalId, string $accountId, string $propertyId, Closure $callback): mixed
+    {
+        return app(TenantMembershipResolver::class)->withinMembership(
+            $principalId,
+            $accountId,
+            $propertyId,
+            fn (): mixed => $callback(),
+        );
     }
 }
